@@ -1,0 +1,12 @@
+# AutoAct — ignorate git
+# director intern Freebuff (nu e parte din proiect)
+.freebuff/
+
+# gunoaie de sistem
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# fișiere temporare locale
+tmp-*
+*.log

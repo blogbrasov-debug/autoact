@@ -1,0 +1,407 @@
+{
+  "name": "AutoAct — Pipeline Acte Transcriere Auto (v1)",
+  "nodes": [
+    {
+      "id": "a1f0c000-0000-4000-8000-000000000001",
+      "name": "Webhook UI",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -140,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "test-ui",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*",
+          "rawBody": false
+        }
+      },
+      "webhookId": "autoact-test-ui"
+    },
+    {
+      "id": "a1f0c000-0000-4000-8000-000000000002",
+      "name": "Decodare fisiere",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        180,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Input: nodul Webhook (5 fișiere binare: ci_fata, ci_verso, civ_fata, civ_verso, talon)\n// Output: un singur item cu cele 5 perechi {cheie_b64, cheie_mime}\nconst CAMPURI = ['ci_fata', 'ci_verso', 'civ_fata', 'civ_verso', 'talon'];\nlet hex = '';\nfor (let i = 0; i < 16; i++) hex += '0123456789abcdef'[Math.floor(Math.random() * 16)];\nconst out = { id_tranzactie: 'tr_' + hex };\n// Accesul corect la binare în nodul Code (Run Once for All Items): items[0].binary\nconst binar = (items[0] && items[0].binary) || {};\nlet gasite = 0;\nfor (const camp of CAMPURI) {\n  if (!binar[camp]) continue;\n  const buffer = await this.helpers.getBinaryDataBuffer(0, camp);\n  if (!buffer || buffer.length === 0) continue;\n  out[camp + '_b64'] = buffer.toString('base64');\n  out[camp + '_mime'] = (binar[camp] && binar[camp].mimeType) || 'image/jpeg';\n  gasite++;\n}\nif (gasite < 5) {\n  throw new Error('Webhook incomplet: ' + gasite + '/5 fisiere primite (aștept: ci_fata, ci_verso, civ_fata, civ_verso, talon).');\n}\nreturn [{ json: out }];\n"
+      }
+    },
+    {
+      "id": "a1f0c000-0000-4000-8000-000000000003",
+      "name": "Vision OCR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"gpt-4o-mini\", max_tokens: 1800, temperature: 0, messages: [{ role: \"user\", content: [ { type: \"text\", text: \"Extrage DOAR textul vizibil din documentele romanesti atasate (CI fata/verso, CIV, talon). Fara interpretare, fara comentarii, fara markdown. Reproduci exact cifrele si literele, inclusiv CNP-ul si seria, asa cum apar.\" }, { type: \"image_url\", image_url: { url: \"data:\" + $json.ci_fata_mime + \";base64,\" + $json.ci_fata_b64 } }, { type: \"image_url\", image_url: { url: \"data:\" + $json.ci_verso_mime + \";base64,\" + $json.ci_verso_b64 } }, { type: \"image_url\", image_url: { url: \"data:\" + $json.civ_fata_mime + \";base64,\" + $json.civ_fata_b64 } }, { type: \"image_url\", image_url: { url: \"data:\" + $json.civ_verso_mime + \";base64,\" + $json.civ_verso_b64 } }, { type: \"image_url\", image_url: { url: \"data:\" + $json.talon_mime + \";base64,\" + $json.talon_b64 } } ] }] }) }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "neverError": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "a1f0c000-0000-4000-8000-000000000004",
+      "name": "Gemini Curatare",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        820,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ system_instruction: { parts: [{ text: \"Esti un motor de curatare a datelor extrase OCR din documente romanesti. Raspunzi EXCLUSIV cu JSON valid, fara markdown, fara explicatii.\" }] }, contents: [{ role: \"user\", parts: [{ text: \"Text OCR brut:\\n\" + $json.choices[0].message.content + \"\\nSarcini:\\n1) Repara diacriticele romanesti in nume, prenume, strazi, localitati (ex: 'Bucuresti' -> 'București', 'Cluj Napoca' -> 'Cluj-Napoca').\\n2) VIN: are EXACT 17 caractere. Literele I, O, Q sunt INTERZISE in VIN (ISO 3779): daca OCR le-a citit, inlocuieste 'O'->'0', 'Q'->'0', 'I'->'1'. Verifica lungimea 17.\\n3) Numere de inmatriculare: normalizeaza la formatul RO (ex: 'b123abc' -> 'B-123-ABC').\\n4) Localitati: valideaza contra listei SIRUTA; daca localitatea nu exista, pune campul 'localitate_siruta_ok': false.\\n5) Nu inventa date: campurile lipsa raman null.\\n\\nReturneaza EXCLUSIV acest JSON:\\n{\\\"date_vanzator\\\":{\\\"nume_complet\\\":\\\"\\\",\\\"cnp\\\":\\\"\\\",\\\"serie_ci\\\":\\\"\\\",\\\"numar_ci\\\":\\\"\\\",\\\"adresa\\\":\\\"\\\",\\\"localitate\\\":\\\"\\\",\\\"judet\\\":\\\"\\\"},\\\"date_cumparator\\\":{...aceleasi campuri...},\\\"date_vehicul\\\":{\\\"marca\\\":\\\"\\\",\\\"model\\\":\\\"\\\",\\\"vin\\\":\\\"\\\",\\\"numar_inmatriculare\\\":\\\"\\\",\\\"an_fabricatie\\\":null,\\\"cilindree_cm\\\":null,\\\"putere_kw\\\":null,\\\"masa_maxima_kg\\\":null,\\\"odometru_km\\\":null,\\\"tip_combustibil\\\":\\\"\\\"},\\\"date_tranzactie\\\":{\\\"data_vanzarii\\\":\\\"\\\",\\\"localitate_incheiere\\\":\\\"\\\"},\\\"localitate_siruta_ok\\\":true,\\\"campuri_nesigure\\\":[\\\"lista campuri cu incredere scazuta\\\"]}\" }] }] }) }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "neverError": false
+            }
+          }
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth"
+      }
+    },
+    {
+      "id": "a1f0c000-0000-4000-8000-000000000005",
+      "name": "Validator CNP",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "function valideazaCNP(cnp) {\n  const out = { cnp: String(cnp == null ? '' : cnp), isValid: false, erori: [], meta: null };\n  if (!/^[0-9]{13}$/.test(out.cnp)) {\n    out.erori.push('CNP invalid: trebuie sa fie un string de exact 13 cifre.');\n    return out;\n  }\n  const cifre = out.cnp.split('').map(Number);\n  const S = cifre[0];\n  const an = (S === 1 || S === 2 ? 1900 : (S === 3 || S === 4 ? 1800 : 2000)) + parseInt(out.cnp.slice(1, 3), 10);\n  const luna = parseInt(out.cnp.slice(3, 5), 10);\n  const zi = parseInt(out.cnp.slice(5, 7), 10);\n  const judet = parseInt(out.cnp.slice(7, 9), 10);\n  if (S < 1 || S > 6) out.erori.push('Prima cifra (S) este in afara intervalului 1-6.');\n  const d = new Date(an, luna - 1, zi);\n  const dataReal = d.getFullYear() === an && d.getMonth() === luna - 1 && d.getDate() === zi;\n  if (!dataReal) out.erori.push('Data de nastere (AA/LL/ZZ) nu exista in calendar.');\n  if (judet < 1 || judet > 52) out.erori.push('Codul de judet (JJ) trebuie sa fie 01-52.');\n  if (out.erori.length > 0) return out;\n  const CHEIE = '279146358279'.split('').map(Number);\n  let suma = 0;\n  for (let i = 0; i < 12; i++) suma += cifre[i] * CHEIE[i];\n  const rest = suma % 11;\n  const cifraControl = rest === 10 ? 1 : rest;\n  if (cifraControl !== cifre[12]) {\n    out.erori.push('Cifra de control incorecta (pozitia 13). Asteptat: ' + cifraControl + '.');\n    return out;\n  }\n  out.isValid = true;\n  out.meta = { sex: S % 2 === 1 ? 'masculin' : 'feminin', an_nastere: an, luna_nastere: luna, zi_nastere: zi, judet_nastere: judet };\n  return out;\n}\n\n// Input: iesirea Gemini Curatare (candidates[0].content.parts[0].text = JSON string)\nconst brut = $json.candidates && $json.candidates[0] && $json.candidates[0].content &&\n  $json.candidates[0].content.parts && $json.candidates[0].content.parts[0].text;\nif (!brut) throw new Error('Gemini nu a returnat continut parsabil.');\nlet date;\ntry {\n  date = JSON.parse(String(brut).replace(/^```(json)?/, '').replace(/```$/, '').trim());\n} catch (e) {\n  throw new Error('Gemini nu a returnat JSON valid: ' + e.message);\n}\nconst v1 = valideazaCNP((date.date_vanzator || {}).cnp);\nconst v2 = valideazaCNP((date.date_cumparator || {}).cnp);\nconst cnp_valid_tot = v1.isValid && v2.isValid;\nconst nesigure = Array.isArray(date.campuri_nesigure) ? date.campuri_nesigure.length : 0;\nconst scor_calitate = Math.max(0, 100 - nesigure * 8 - (cnp_valid_tot ? 0 : 15));\nreturn [{ json: { ...date, id_tranzactie: $json.id_tranzactie, cnp_valid_tot, cnp_erori: v1.erori.concat(v2.erori), scor_calitate } }];\n"
+      }
+    },
+    {
+      "id": "a1f0c000-0000-4000-8000-000000000006",
+      "name": "IF Scor & CNP",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1460,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c-scor",
+              "leftValue": "={{ $json.scor_calitate }}",
+              "rightValue": 95,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            },
+            {
+              "id": "c-cnp",
+              "leftValue": "={{ $json.cnp_valid_tot }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a1f0c000-0000-4000-8000-000000000007",
+      "name": "Fallback Client",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1460,
+        520
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: \"corectii_necesare\", scor_calitate: $json.scor_calitate, cnp_valid_tot: $json.cnp_valid_tot, cnp_erori: $json.cnp_erori, campuri_nesigure: $json.campuri_nesigure, date: { date_vanzator: $json.date_vanzator, date_cumparator: $json.date_cumparator, date_vehicul: $json.date_vehicul, date_tranzactie: $json.date_tranzactie }, mesaj_client: \"Unele date nu au trecut validarea. Corecteaza campurile evidențiate pe ecranul de pre-vizualizare si retrimite.\" }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "a1f0c000-0000-4000-8000-000000000008",
+      "name": "IF Plata",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1740,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c-plata",
+              "leftValue": "={{ $json.plata_confirmata === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a1f0c000-0000-4000-8000-000000000009",
+      "name": "Respond Plata",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1740,
+        520
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: \"awaiting_payment\", suma_ron: 49, moneda: \"RON\", id_tranzactie: $json.id_tranzactie, url_plata: \"https://autoact.ro/plata?tr=\" + $json.id_tranzactie, mesaj: \"Finalizeaza plata pentru a genera documentele.\" }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "a1f0c000-0000-4000-8000-000000000010",
+      "name": "Documente ZIP",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2020,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Generează harta de înlocuiri pentru Google Docs batchUpdate (Modulul 2.7).\n// Harta canonică: module-2/sabloane/placeholders.json — verificată de\n// module-2/verifica-sabloane.js contra Profilului de Tranzacție demo.\nconst date = $json;\nconst HARTA = {\n  tranzactie_numar: 'id_tranzactie',\n  data_vanzarii: 'date_tranzactie.data_vanzarii',\n  localitate_incheiere: 'date_tranzactie.localitate_incheiere',\n  suma_ron: 'date_tranzactie.suma_ron',\n  scutire_sub_24_luni: 'date_tranzactie.scutire_taxa_sub_24_luni',\n  vanzator_nume: 'date_vanzator.nume_complet',\n  vanzator_cnp: 'date_vanzator.cnp',\n  vanzator_serie_ci: 'date_vanzator.serie_ci',\n  vanzator_numar_ci: 'date_vanzator.numar_ci',\n  vanzator_adresa: 'date_vanzator.adresa',\n  vanzator_localitate: 'date_vanzator.localitate',\n  vanzator_judet: 'date_vanzator.judet',\n  vanzator_telefon: 'date_vanzator.telefon',\n  vanzator_email: 'date_vanzator.email',\n  cumparator_nume: 'date_cumparator.nume_complet',\n  cumparator_cnp: 'date_cumparator.cnp',\n  cumparator_serie_ci: 'date_cumparator.serie_ci',\n  cumparator_numar_ci: 'date_cumparator.numar_ci',\n  cumparator_adresa: 'date_cumparator.adresa',\n  cumparator_localitate: 'date_cumparator.localitate',\n  cumparator_judet: 'date_cumparator.judet',\n  cumparator_telefon: 'date_cumparator.telefon',\n  cumparator_email: 'date_cumparator.email',\n  vehicul_marca: 'date_vehicul.marca',\n  vehicul_model: 'date_vehicul.model',\n  vehicul_vin: 'date_vehicul.vin',\n  vehicul_placuta: 'date_vehicul.numar_inmatriculare',\n  vehicul_an_fabricatie: 'date_vehicul.an_fabricatie',\n  vehicul_cilindree: 'date_vehicul.cilindree_cm',\n  vehicul_putere_kw: 'date_vehicul.putere_kw',\n  vehicul_masa_maxima: 'date_vehicul.masa_maxima_kg',\n  vehicul_combustibil: 'date_vehicul.tip_combustibil',\n  vehicul_odometru: 'date_vehicul.odometru_km',\n  vehicul_civ_serie: 'date_vehicul.certificat_inmatriculare_serie',\n  vehicul_an_prim_inmatriculare: 'date_vehicul.an_fabricatie',\n  drpciv_judet: 'date_cumparator.judet',\n  fisc_judet: 'date_cumparator.judet'\n};\nconst obtine = (cale) => cale.split('.').reduce((o, k) => (o == null ? undefined : o[k]), date);\nconst valori = {};\nfor (const [ph, cale] of Object.entries(HARTA)) {\n  const v = obtine(cale);\n  valori[ph] = (v === undefined || v === null) ? '' : String(v);\n}\nreturn [{ json: {\n  id_tranzactie: date.id_tranzactie,\n  documente: ['01-contract-vanzare-cumparare.pdf', '02-cerere-drpciv.pdf', '03-declaratii-fiscale.pdf'],\n  valori,\n  zip_nume: date.id_tranzactie + '.zip',\n  destinatar: date.date_cumparator.email,\n  nume_client: date.date_cumparator.nume_complet\n} }];\n"
+      }
+    },
+    {
+      "id": "a1f0c000-0000-4000-8000-000000000011",
+      "name": "Gmail Livrare",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2300,
+        300
+      ],
+      "parameters": {
+        "sendTo": "={{ $json.destinatar }}",
+        "subject": "AutoAct — actele tale pentru transcriere auto sunt gata (ZIP + factură)",
+        "emailType": "html",
+        "message": "=<p>Bună, {{ $json.nume_client }},</p><p>Pachetul tău de acte pentru transcrierea auto este gata și îl găsești atașat (ZIP + factură).</p><h3>Ce faci după ce printezi actele</h3><ol><li>Printează PDF-urile din arhivă.</li><li>Mergi ÎNTÂI la notar cu mașina și actele originale pentru autentificarea contractului.</li><li>Semnați amândoi în fața notarului.</li><li>Mergi la DRPCIV cu contractul autentificat, CI, CIV original și dovada plății taxei de transcriere.</li><li>Primești noua înmatriculare.</li></ol><p>Verifică toate datele înainte de printare — actele se emit exact cu datele confirmate de tine la pasul de verificare.</p><p>Cu stimă,<br><strong>Echipa AutoAct</strong><br>autoact.ro</p>",
+        "options": {
+          "appendAttribution": false
+        }
+      }
+    },
+    {
+      "id": "a1f0c000-0000-4000-8000-0000000000a1",
+      "name": "Sticky - Instalare",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        -80
+      ],
+      "parameters": {
+        "width": 520,
+        "height": 260,
+        "color": 4,
+        "content": "## INSTALARE — AutoAct Pipeline v1\n1) n8n → ⋯ → **Import from File** → acest JSON.\n2) Creează și atribuie credentials: **OpenAI** (Header Auth, `Authorization: Bearer sk-...`) la *Vision OCR*; **Gemini** (Query Auth: name=`key`, value=`AIza...`) la *Gemini Curatare*; **Gmail OAuth2** la *Gmail Livrare*.\n3) Activează workflow-ul → Production URL: `https://domeniul.ro/webhook/test-ui`. Adaugă la *Webhook UI* Authentication = Header Auth (`X-AutoAct-Key`).\n4) env (Modulul 3): `NODE_FUNCTION_ALLOW_BUILTIN=fs,path`"
+      }
+    },
+    {
+      "id": "a1f0c000-0000-4000-8000-0000000000a2",
+      "name": "Sticky - Validator CNP",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        540
+      ],
+      "parameters": {
+        "width": 420,
+        "height": 180,
+        "color": 5,
+        "content": "### Validator CNP (nodul 5)\nCheia `279146358279` · rest % 11 · rest 10 → cifra 1.\nSursă: `module-2/cnp-validator.code-node.js` — testat 5/5 pe Test Data Kit.\nScor = 100 − 8 × campuri_nesigure − 15 dacă CNP invalid. Prag livrare: **≥ 95**."
+      }
+    },
+    {
+      "id": "a1f0c000-0000-4000-8000-0000000000a3",
+      "name": "Sticky - Ramura plata",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1660,
+        540
+      ],
+      "parameters": {
+        "width": 460,
+        "height": 190,
+        "color": 6,
+        "content": "### Ramura PLATĂ\n*IF Plata* devine true doar când fluxul Netopia (webhook separat) reintră cu `plata_confirmata=true` + `id_tranzactie`. Până atunci clientul primește `url_plata`.\n*Documente ZIP*: MVP emite payload + lista PDF; integrarea Google Docs → PDF → zip-store conform BLUEPRINT.md §2.7. Atașează ZIP-ul nodului Gmail din /home/node/local/."
+      }
+    }
+  ],
+  "connections": {
+    "Webhook UI": {
+      "main": [
+        [
+          {
+            "node": "Decodare fisiere",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decodare fisiere": {
+      "main": [
+        [
+          {
+            "node": "Vision OCR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vision OCR": {
+      "main": [
+        [
+          {
+            "node": "Gemini Curatare",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Curatare": {
+      "main": [
+        [
+          {
+            "node": "Validator CNP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validator CNP": {
+      "main": [
+        [
+          {
+            "node": "IF Scor & CNP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Scor & CNP": {
+      "main": [
+        [
+          {
+            "node": "IF Plata",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fallback Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Plata": {
+      "main": [
+        [
+          {
+            "node": "Documente ZIP",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Plata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Documente ZIP": {
+      "main": [
+        [
+          {
+            "node": "Gmail Livrare",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "autoact-blueprint-v1"
+  }
+}

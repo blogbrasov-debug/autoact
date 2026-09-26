@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AutoAct — Acte transcriere auto în 60 de secunde</title>
+  <meta name="description" content="Încarci pozele actelor, sistemul completează automat contractul, cererea DRPCIV și declarațiile fiscale. Verifici datele, plătești 49 RON, primești ZIP-ul instant.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="hero">
+    <h1>Actele pentru transcriere auto, gata în 60 de secunde</h1>
+    <p class="hero-sub">Încarci pozele actelor · sistemul completează automat contractul, cererea DRPCIV și declarațiile fiscale · verifici datele · plătești <strong id="hero-pret">49 RON</strong> · primești ZIP-ul instant.</p>
+  </header>
+
+  <main>
+    <!-- ======================= CHESTIONAR ======================= -->
+    <section id="ecran-chestionar" class="card">
+      <h2>Completează chestionarul</h2>
+      <p class="hint">Completezi manual doar ce <em>nu</em> apare pe acte. Restul (nume, CNP, VIN, plăcuțe) le extragem automat din pozele documentelor.</p>
+
+      <!-- Pas 0: confirmare documente -->
+      <div class="pas" data-pas="0">
+        <h3>Pasul 1 din 5 — Documentele tale</h3>
+        <p class="hint">Ai la tine următoarele documente? Le vei fotografia în pasul următor.</p>
+        <label class="check">
+          <input type="checkbox" id="doc-ci">
+          <span><strong>Cartea de identitate</strong> — vânzătorul (față + verso)</span>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="doc-civ">
+          <span><strong>Certificatul de înmatriculare</strong> (față + verso)</span>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="doc-talon">
+          <span><strong>Talonul</strong></span>
+        </label>
+      </div>
+
+      <!-- Pas 1: upload -->
+      <div class="pas" data-pas="1" hidden>
+        <h3>Pasul 2 din 5 — Încarcă pozele</h3>
+        <p class="hint">Fotografiază documentele pe un fond întunecat, fără flash, cadru complet.</p>
+        <div class="grid-upload">
+          <label class="upload-tile">
+            <span class="upload-titlu">CI față</span>
+            <input type="file" accept="image/*" data-camp="ci_fata">
+            <span class="upload-stare" data-stare="ci_fata">Neîncărcat</span>
+          </label>
+          <label class="upload-tile">
+            <span class="upload-titlu">CI verso</span>
+            <input type="file" accept="image/*" data-camp="ci_verso">
+            <span class="upload-stare" data-stare="ci_verso">Neîncărcat</span>
+          </label>
+          <label class="upload-tile">
+            <span class="upload-titlu">CIV față</span>
+            <input type="file" accept="image/*" data-camp="civ_fata">
+            <span class="upload-stare" data-stare="civ_fata">Neîncărcat</span>
+          </label>
+          <label class="upload-tile">
+            <span class="upload-titlu">CIV verso</span>
+            <input type="file" accept="image/*" data-camp="civ_verso">
+            <span class="upload-stare" data-stare="civ_verso">Neîncărcat</span>
+          </label>
+          <label class="upload-tile">
+            <span class="upload-titlu">Talon</span>
+            <input type="file" accept="image/*" data-camp="talon">
+            <span class="upload-stare" data-stare="talon">Neîncărcat</span>
+          </label>
+        </div>
+        <div class="actiuni-pas">
+          <button type="button" id="btn-demo" class="btn btn-secondar">Vezi demo cu date de probă</button>
+        </div>
+        <p id="eroare-upload" class="eroare-text" hidden></p>
+      </div>
+
+      <!-- Pas 2: preț -->
+      <div class="pas" data-pas="2" hidden>
+        <h3>Pasul 3 din 5 — Prețul de vânzare</h3>
+        <label class="camp">
+          <span>Prețul de vânzare (RON)</span>
+          <input type="number" id="inp-pret" min="1" inputmode="numeric" placeholder="ex: 9500">
+        </label>
+        <p class="hint">Nu apare pe niciun document scanat — îl completăm manual în contract.</p>
+      </div>
+
+      <!-- Pas 3: dată + oraș + scutire -->
+      <div class="pas" data-pas="3" hidden>
+        <h3>Pasul 4 din 5 — Detaliile tranzacției</h3>
+        <label class="camp">
+          <span>Data tranzacției</span>
+          <input type="date" id="inp-data">
+        </label>
+        <label class="camp">
+          <span>Orașul unde se încheie contractul</span>
+          <input type="text" id="inp-oras" placeholder="ex: București" autocomplete="address-level2">
+        </label>
+        <label class="check">
+          <input type="checkbox" id="inp-scutire">
+          <span>Mașina are <strong>sub 24 de luni</strong> de la prima înmatriculare <em>(scutire taxa de transcriere)</em></span>
+        </label>
+      </div>
+
+      <!-- Navigare chestionar -->
+      <div class="chestionar-nav">
+        <button type="button" id="btn-back" class="btn btn-secondar" hidden>← Înapoi</button>
+        <button type="button" id="btn-next" class="btn btn-primar">Continuă →</button>
+      </div>
+      <div class="progres"><div id="progres-bara"></div></div>
+    </section>
+
+    <!-- ======================= ECRANUL ZERO-REFUND ======================= -->
+    <section id="ecran-preview" class="card" hidden>
+      <div class="preview-header">
+        <h2>Verifică datele înainte de plată</h2>
+        <span class="badge-scor">Scor date: <strong id="scor-val">—</strong>%</span>
+      </div>
+      <p id="mesaj-client" class="mesaj-avertisment" hidden></p>
+
+      <div class="taburi" role="tablist">
+        <button type="button" class="tab tab-activ" role="tab" data-tab="vanzator">Vânzător</button>
+        <button type="button" class="tab" role="tab" data-tab="cumparator">Cumpărător</button>
+        <button type="button" class="tab" role="tab" data-tab="vehicul">Vehicul</button>
+        <button type="button" class="tab" role="tab" data-tab="tranzactie">Tranzacție</button>
+      </div>
+
+      <div id="tab-continut"></div>
+
+      <div class="rezumat-campuri" id="rezumat-campuri"></div>
+
+      <div class="acord-box">
+        <label class="check">
+          <input type="checkbox" id="acord-client">
+          <span><strong>Declar pe proprie răspundere</strong> că toate datele sunt corecte și complete și am verificat CNP-ul, seria CI, VIN-ul și plăcuța. Înțeleg că actele se emit exact cu datele de mai sus și că orice eroare a datelor confirmate de mine nu poate fi rambursată.</span>
+        </label>
+      </div>
+
+      <button type="button" id="btn-plata" class="btn btn-plata" disabled>PLĂTEȘTE 49 RON</button>
+      <p class="hint centrat">Plată securizată Netopia 3-D Secure · primești ZIP-ul + factura pe e-mail în ~60 de secunde</p>
+    </section>
+  </main>
+
+  <footer>
+    <p>AutoAct · autoact.ro · <a href="/termeni">Termeni și condiții</a> · <a href="/gdpr">GDPR</a></p>
+  </footer>
+
+  <script src="config.js"></script>
+  <script src="validare.js"></script>
+  <script src="demo-data.js"></script>
+  <script src="app.js"></script>
+
+  <!-- Date structurate (SEO) -->
+  <noscript>
+    <p style="text-align:center">AutoAct are nevoie de JavaScript pentru încărcarea pozelor și verificarea datelor.</p>
+  </noscript>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    "name": "Pachet acte transcriere auto — AutoAct",
+    "description": "Contract vânzare-cumpărare + cerere DRPCIV + declarații fiscale, generate automat din pozele actelor și livrate în PDF pe e-mail.",
+    "brand": { "@type": "Brand", "name": "AutoAct" },
+    "offers": {
+      "@type": "Offer",
+      "price": "49",
+      "priceCurrency": "RON",
+      "availability": "https://schema.org/InStock"
+    }
+  }
+  </script>
+</body>
+</html>

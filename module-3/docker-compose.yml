@@ -1,0 +1,99 @@
+# ============================================================
+# AutoAct | Modulul 3 | docker-compose.yml
+# Stack: n8n (self-hosted) + PostgreSQL 16 + Caddy (SSL automat)
+# Țintă: Oracle Cloud Always Free, VM.Standard.A1.Flex (ARM64)
+# Toate valorile secrete vin din .env (generat de deploy-autoact.sh)
+# ============================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=autoact
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=autoact
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U autoact -d autoact"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  n8n:
+    image: n8nio/n8n:latest          # imagine multi-arch: rulează nativ pe ARM64
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # --- Baza de date ---
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=autoact
+      - DB_POSTGRESDB_USER=autoact
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+      # --- Identitate & webhook ---
+      - N8N_HOST=${DOMAIN}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - N8N_PROXY_HOPS=1             # Caddy e singurul proxy în fața lui n8n
+      - WEBHOOK_URL=https://${DOMAIN}/
+      # --- Securitate ---
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}   # BACKUP OBLIGATORIU (decriptare credentials)
+      # --- Cod în nodurile "Code": doar fs + path + crypto, pentru ZIP-builder (Modulul 2.7)
+      # și decriptarea semnăturii Netopia (Modulul 5)
+      - NODE_FUNCTION_ALLOW_BUILTIN=fs,path,crypto
+      # --- OAuth2 Google (nodul Gmail Livrare + Google Docs API, Modulul 2.8) ---
+      # Se obțin la https://console.cloud.google.com → Credentials → OAuth client ID
+      # și se adaugă în .env după primul deploy (rămân goale până atunci).
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET}
+      # --- Plăți Netopia (Modulul 5) — se completează în .env după deploy ---
+      # NETOPIA_RSA_PRIVATE_KEY = cheia privată PKCS#1 pe UN SINGUR rând, cu \n literal
+      - NETOPIA_RSA_PRIVATE_KEY=${NETOPIA_RSA_PRIVATE_KEY}
+      - NETOPIA_MPAY_SECRET=${NETOPIA_MPAY_SECRET}
+      # --- Facturare SmartBill (Modulul 5) ---
+      - SMARTBILL_VAT_CODE=${SMARTBILL_VAT_CODE}
+      - SMARTBILL_SERIE=${SMARTBILL_SERIE:-AUTOACT}
+      # --- Șabloane Google Docs (Modulul 5 — generare documente) ---
+      # ID-urile din URL-urile Google Docs ale celor 3 șabloane din module-2/sabloane/
+      - GOOGLE_DOCS_TEMPLATE_CONTRACT=${GOOGLE_DOCS_TEMPLATE_CONTRACT}
+      - GOOGLE_DOCS_TEMPLATE_DRPCIV=${GOOGLE_DOCS_TEMPLATE_DRPCIV}
+      - GOOGLE_DOCS_TEMPLATE_DECLARATII=${GOOGLE_DOCS_TEMPLATE_DECLARATII}
+      # --- GDPR: n8n își curăță singur execuțiile mai vechi de 48 h ---
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=48
+      - EXECUTIONS_DATA_PRUNE_MAX_COUNT=5000
+      # --- Diverse ---
+      - GENERIC_TIMEZONE=Europe/Bucharest
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_HIRING_BANNER_ENABLED=false
+      - N8N_PERSONALIZATION_ENABLED=false
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - local_files:/home/node/local # zonă de lucru provizorie ZIP (curățată de job-ul GDPR, Modulul 4)
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - n8n
+    ports:
+      - "80:80"                      # redirect HTTPS + challenge ACME
+      - "443:443"                    # singura poartă publică (UI n8n + webhook-uri)
+    environment:
+      - DOMAIN=${DOMAIN}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data             # certificatele Let's Encrypt persistă la restart
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  n8n_data:
+  local_files:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,23 @@
+# AutoAct | Modulul 3 | Caddyfile
+# TLS automat Let's Encrypt + reverse proxy spre n8n.
+# {$DOMAIN} este interpolat din variabila de mediu DOMAIN (docker-compose.yml).
+
+{
+	email support@autoact.ro
+}
+
+{$DOMAIN} {
+	encode gzip
+
+	reverse_proxy n8n:5678 {
+		# n8n folosește WebSocket (editor) și SSE (execuții live) — fără buffering
+		flush_interval -1
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}

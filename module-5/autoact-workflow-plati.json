@@ -1,0 +1,681 @@
+{
+  "name": "AutoAct — Plăți Netopia + Facturare SmartBill + Documente (v1)",
+  "nodes": [
+    {
+      "id": "b7e5a000-0000-4000-8000-000000000001",
+      "name": "Webhook Netopia",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "netopia",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": false
+        }
+      },
+      "webhookId": "autoact-netopia"
+    },
+    {
+      "id": "b7e5a000-0000-4000-8000-000000000002",
+      "name": "Parsare POST Netopia",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Netopia transmite POST form-urlencoded cu un singur câmp „data\" (Base64-encoded XML/JSON).\n// Un răspuns 200 cu „ok\" (lipsă eroare) confirmă primirea; orice altceva = retransmisie.\nconst out = { ok: true };\nif ($json && $json.body && $json.body.data) {\n  out.data_encoded = $json.body.data;\n}\nreturn [{ json: out }];\n"
+      }
+    },
+    {
+      "id": "b7e5a000-0000-4000-8000-000000000003",
+      "name": "Decriptare Semnătură",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const crypto = require('crypto');\n\nconst CHEIE_PRIVATA = $env.NETOPIA_RSA_PRIVATE_KEY.split(String.fromCharCode(92) + 'n').join(String.fromCharCode(10));\nconst MPAY_SECRET = $env.NETOPIA_MPAY_SECRET;\nconst t0 = Date.now();\n\nif (!$json.data_encoded) {\n  return [{ json: { semnatura_ok: false, motiv: 'lipsa data' } }];\n}\nconst buffer = Buffer.from($json.data_encoded, 'base64');\nif (buffer.length < 400) {\n  return [{ json: { semnatura_ok: false, motiv: 'date prea scurte' } }];\n}\n\n// 1. env_key = primii 256 bytes → RSA-OAEP(SHA-256)\nconst envKey = buffer.subarray(0, 256);\nlet aesKey;\ntry {\n  aesKey = crypto.privateDecrypt(\n    { key: CHEIE_PRIVATA, padding: crypto.constants.RSA_PKCS1_OAEP_PADDING, oaepHash: 'sha256' },\n    envKey\n  );\n} catch (e) {\n  return [{ json: { semnatura_ok: false, motiv: 'rsa_fail: ' + e.message } }];\n}\n\n// 2. AES-256-CBC; IV = primele 16 bytes din AES key\nconst criptat = buffer.subarray(256);\nconst iv = aesKey.subarray(0, 16);\nconst cheieAes = aesKey.subarray(16, 48);\nlet decriptat;\ntry {\n  const decipher = crypto.createDecipheriv('aes-256-cbc', cheieAes, iv);\n  decriptat = Buffer.concat([decipher.update(criptat), decipher.final()]).toString('utf8');\n} catch (e) {\n  return [{ json: { semnatura_ok: false, motiv: 'aes_fail: ' + e.message } }];\n}\n\nlet date;\ntry { date = JSON.parse(decriptat); }\ncatch (e) { return [{ json: { semnatura_ok: false, motiv: 'json_fail' } }]; }\n\n// 3. HMAC-SHA256 pe datele esențiale (integritate)\nconst hashAsteptat = crypto\n  .createHmac('sha256', MPAY_SECRET)\n  .update([date.order_id, date.amount, date.currency, date.status].join('|'))\n  .digest('hex');\nif (hashAsteptat !== date.hash) {\n  return [{ json: { semnatura_ok: false, motiv: 'hmac_fail' } }];\n}\n\nreturn [{ json: {\n  semnatura_ok: true,\n  durata_ms: Date.now() - t0,\n  order_id: String(date.order_id),\n  suma: Number(date.amount),\n  moneda: String(date.currency),\n  status: String(date.status),\n  cod_eroare: date.error_code || null\n} }];\n"
+      }
+    },
+    {
+      "id": "b7e5a000-0000-4000-8000-000000000004",
+      "name": "IF Semnătură Validă",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        800,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c-semn",
+              "leftValue": "={{ $json.semnatura_ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b7e5a000-0000-4000-8000-000000000005",
+      "name": "Respond Semnătură Invalidă",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        800,
+        520
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, motiv: $json.motiv }) }}",
+        "options": {
+          "responseCode": 496
+        }
+      }
+    },
+    {
+      "id": "b7e5a000-0000-4000-8000-000000000006",
+      "name": "Idempotenta (Postgres)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1120,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH ins AS (INSERT INTO plati_procesate (order_id, id_tranzactie, suma, moneda, status) VALUES ('{{ $json.order_id }}', '{{ $json.order_id }}', {{ $json.suma }}, '{{ $json.moneda }}', '{{ $json.status }}') ON CONFLICT (order_id) DO NOTHING RETURNING order_id, status, suma), rezultat AS (SELECT order_id, status, suma, 0 AS duplicat FROM ins UNION ALL SELECT '{{ $json.order_id }}'::text, NULL::text, NULL::numeric, 1 AS duplicat WHERE NOT EXISTS (SELECT 1 FROM ins)) SELECT * FROM rezultat;",
+        "options": {}
+      }
+    },
+    {
+      "id": "b7e5a000-0000-4000-8000-000000000007",
+      "name": "IF Deja Procesată",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c-idem",
+              "leftValue": "={{ $json.duplicat }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b7e5a000-0000-4000-8000-000000000008",
+      "name": "Respond Deja Procesată",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1440,
+        520
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, duplicat: true }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "b7e5a000-0000-4000-8000-000000000013",
+      "name": "Data Tranzacție (Postgres)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1600,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id_tranzactie, profil_json, nume_cumparator, cnp_cumparator, adresa_cumparator, localitate_cumparator, judet_cumparator, email_cumparator, data_vanzarii, '{{ $json.status }}' AS status, {{ $json.suma }} AS suma FROM tranzactii WHERE id_tranzactie = '{{ $json.order_id }}' LIMIT 1;",
+        "options": {}
+      }
+    },
+    {
+      "id": "b7e5a000-0000-4000-8000-000000000009",
+      "name": "IF Plată Confirmată",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c-status",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "confirmed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "c-suma",
+              "leftValue": "={{ $json.suma }}",
+              "rightValue": 49,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b7e5a000-0000-4000-8000-000000000010",
+      "name": "Respond Plată Respinsă",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1920,
+        520
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, status: $json.status, factura: false }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "b7e5a000-0000-4000-8000-000000000011",
+      "name": "Payload SmartBill",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Construiește factura pentru SmartBill (BLUEPRINT.md §5.1).\n// Datele clientului vin aplatizate din nodul „Data Tranzacție (Postgres)\" (rândul tranzacției).\nconst t = $json;\nconst dateCumparator = {\n  nume: t.nume_cumparator || 'Client AutoAct',\n  cnp: t.cnp_cumparator || '',\n  adresa: t.adresa_cumparator || '',\n  oras: t.localitate_cumparator || t.localitate || '',\n  judet: t.judet_cumparator || '',\n  email: t.email_cumparator || ''\n};\nconst payload = {\n  companyVatCode: $env.SMARTBILL_VAT_CODE,\n  client: {\n    name: dateCumparator.nume,\n    vatCode: dateCumparator.cnp,\n    address: { city: dateCumparator.oras, street: dateCumparator.adresa, county: dateCumparator.judet },\n    countryId: 'RO',\n    email: dateCumparator.email\n  },\n  seriesName: $env.SMARTBILL_SERIE,\n  issueDate: (t.data_vanzarii || new Date().toISOString().slice(0, 10)),\n  productName: 'Pachet acte transcriere auto — AutoAct',\n  productDescription: 'Contract v-c + cereri DRPCIV + declarații fiscale (PDF/ZIP). TVA nu se percepe — regim simplificat (art. 282 ind. 2 C.fisc.).',\n  quantity: 1,\n  price: 49,\n  currency: 'RON',\n  measuringUnit: 'buc',\n  saveToDraft: false,\n  sendEmail: true,\n  eInvoice: { sendEInvoice: true }\n};\nreturn [{ json: { ...$json, smartbill_payload: payload, order_id: $json.order_id || t.id_tranzactie } }];\n"
+      }
+    },
+    {
+      "id": "b7e5a000-0000-4000-8000-000000000012",
+      "name": "SmartBill Factură",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2560,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://ws.smartbill.ro:8183/SBORO/api/document/new",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.smartbill_payload) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "REPLACE_CRED_SMARTBILL",
+          "name": "SmartBill Basic Auth"
+        }
+      }
+    },
+    {
+      "id": "b7e5a000-0000-4000-8000-000000000014",
+      "name": "Placeholder-e Docs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "function obtine(obiect, cale) {\n  return cale.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obiect);\n}\nlet tranzactia = {};\ntry { tranzactia = typeof $json.profil_json === 'string' ? JSON.parse($json.profil_json) : ($json.profil_json || {}); }\ncatch (e) { tranzactia = {}; }\nif (tranzactia.date_vanzator && tranzactia.date_cumparator && tranzactia.date_vehicul) {\n  // profil complet → asigură date_tranzactie cu fallback pe coloane\n  tranzactia = { ...tranzactia, id_tranzactie: tranzactia.id_tranzactie || $json.id_tranzactie };\n  if (!tranzactia.date_tranzactie) tranzactia.date_tranzactie = { data_vanzarii: $json.data_vanzarii, localitate_incheiere: tranzactia.date_vanzator.localitate, suma_ron: $json.suma };\n} else {\n  // fallback: construiește profilul din coloanele aplatizate (integrare / DB partial)\n  tranzactia = {\n    id_tranzactie: $json.id_tranzactie,\n    date_vanzator: { nume_complet: tranzactia.nume_vanzator || '[NECUNOSCUT]', cnp: tranzactia.cnp_vanzator || '', serie_ci: '', numar_ci: '', adresa: tranzactia.adresa_vanzator || '', localitate: '', judet: '', telefon: '', email: '' },\n    date_cumparator: { nume_complet: $json.nume_cumparator || '[NECUNOSCUT]', cnp: $json.cnp_cumparator || '', serie_ci: '', numar_ci: '', adresa: $json.adresa_cumparator || '', localitate: $json.localitate_cumparator || '', judet: $json.judet_cumparator || '', telefon: '', email: $json.email_cumparator || '' },\n    date_vehicul: { marca: tranzactia.marca || '[NECUNOSCUT]', model: tranzactia.model || '', vin: tranzactia.vin || '', numar_inmatriculare: tranzactia.numar_inmatriculare || '', an_fabricatie: tranzactia.an_fabricatie || '', cilindree_cm: tranzactia.cilindree_cm || '', putere_kw: tranzactia.putere_kw || '', masa_maxima_kg: tranzactia.masa_maxima_kg || '', tip_combustibil: tranzactia.tip_combustibil || '', certificat_inmatriculare_serie: tranzactia.certificat_inmatriculare_serie || '' },\n    date_tranzactie: { data_vanzarii: $json.data_vanzarii || '', localitate_incheiere: '', suma_ron: $json.suma || 0, scutire_taxa_sub_24_luni: false }\n  };\n}\nconst idTr = tranzactia.id_tranzactie || $json.id_tranzactie;\nconst HARTA_PH = {\"tranzactie_numar\":\"id_tranzactie\",\"data_vanzarii\":\"date_tranzactie.data_vanzarii\",\"localitate_incheiere\":\"date_tranzactie.localitate_incheiere\",\"suma_ron\":\"date_tranzactie.suma_ron\",\"scutire_sub_24_luni\":\"date_tranzactie.scutire_taxa_sub_24_luni\",\"vanzator_nume\":\"date_vanzator.nume_complet\",\"vanzator_cnp\":\"date_vanzator.cnp\",\"vanzator_serie_ci\":\"date_vanzator.serie_ci\",\"vanzator_numar_ci\":\"date_vanzator.numar_ci\",\"vanzator_adresa\":\"date_vanzator.adresa\",\"vanzator_localitate\":\"date_vanzator.localitate\",\"vanzator_judet\":\"date_vanzator.judet\",\"vanzator_telefon\":\"date_vanzator.telefon\",\"vanzator_email\":\"date_vanzator.email\",\"cumparator_nume\":\"date_cumparator.nume_complet\",\"cumparator_cnp\":\"date_cumparator.cnp\",\"cumparator_serie_ci\":\"date_cumparator.serie_ci\",\"cumparator_numar_ci\":\"date_cumparator.numar_ci\",\"cumparator_adresa\":\"date_cumparator.adresa\",\"cumparator_localitate\":\"date_cumparator.localitate\",\"cumparator_judet\":\"date_cumparator.judet\",\"cumparator_telefon\":\"date_cumparator.telefon\",\"cumparator_email\":\"date_cumparator.email\",\"vehicul_marca\":\"date_vehicul.marca\",\"vehicul_model\":\"date_vehicul.model\",\"vehicul_vin\":\"date_vehicul.vin\",\"vehicul_placuta\":\"date_vehicul.numar_inmatriculare\",\"vehicul_an_fabricatie\":\"date_vehicul.an_fabricatie\",\"vehicul_cilindree\":\"date_vehicul.cilindree_cm\",\"vehicul_putere_kw\":\"date_vehicul.putere_kw\",\"vehicul_masa_maxima\":\"date_vehicul.masa_maxima_kg\",\"vehicul_combustibil\":\"date_vehicul.tip_combustibil\",\"vehicul_odometru\":\"date_vehicul.odometru_km\",\"vehicul_civ_serie\":\"date_vehicul.certificat_inmatriculare_serie\",\"vehicul_an_prim_inmatriculare\":\"date_vehicul.an_fabricatie\",\"drpciv_judet\":\"date_cumparator.judet\",\"fisc_judet\":\"date_cumparator.judet\"};\nconst valori = {};\nfor (const [ph, cale] of Object.entries(HARTA_PH)) {\n  const v = obtine(tranzactia, cale);\n  valori[ph] = (v === undefined || v === null) ? '' : String(v);\n}\nconst DOCUMENTE_DOCS = [{\"cheie\":\"01_contract_vanzare_cumparare\",\"doc_nume\":\"01-contract-vanzare-cumparare\",\"env\":\"GOOGLE_DOCS_TEMPLATE_CONTRACT\"},{\"cheie\":\"02_cerere_drpciv\",\"doc_nume\":\"02-cerere-drpciv\",\"env\":\"GOOGLE_DOCS_TEMPLATE_DRPCIV\"},{\"cheie\":\"03_declaratii_fiscale\",\"doc_nume\":\"03-declaratii-fiscale\",\"env\":\"GOOGLE_DOCS_TEMPLATE_DECLARATII\"}];\nconst iesiri = [];\nfor (const doc of DOCUMENTE_DOCS) {\n  const docId = $env[doc.env];\n  if (!docId) throw new Error('Env lipsă: ' + doc.env + ' (ID-ul șablonului Google Docs)');\n  const requests = [];\n  for (const [ph, val] of Object.entries(valori)) {\n    requests.push({ replaceAllText: { containsText: { text: '{{' + ph + '}}', matchCase: true }, replaceText: val } });\n  }\n  iesiri.push({ json: { doc_id: docId, doc_nume: doc.doc_nume, document_id_copie: null, id_tranzactie: idTr, valori, requests } });\n}\nreturn iesiri;\n"
+      }
+    },
+    {
+      "id": "b7e5a000-0000-4000-8000-000000000015",
+      "name": "Copie Template (Drive)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3200,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ \"https://www.googleapis.com/drive/v3/files/\" + $json.doc_id + \"/copy\" }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $json.doc_nume + \" — \" + $json.id_tranzactie }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "b7e5a000-0000-4000-8000-000000000016",
+      "name": "Docs batchUpdate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3520,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ \"https://docs.googleapis.com/v1/documents/\" + $json.documentId + \":batchUpdate\" }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ requests: $json.requests }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      }
+    },
+    {
+      "id": "b7e5a000-0000-4000-8000-000000000017",
+      "name": "Export PDF (Drive)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3840,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ \"https://www.googleapis.com/drive/v3/files/\" + $json.documentId + \"/export?mimeType=application%2Fpdf\" }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          },
+          "timeout": 60000
+        }
+      }
+    },
+    {
+      "id": "b7e5a000-0000-4000-8000-000000000018",
+      "name": "Șterge Copia (Drive)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4160,
+        300
+      ],
+      "parameters": {
+        "method": "DELETE",
+        "url": "={{ \"https://www.googleapis.com/drive/v3/files/\" + $json.documentId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {}
+      }
+    },
+    {
+      "id": "b7e5a000-0000-4000-8000-000000000019",
+      "name": "ZIP Pachet",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4480,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Colectează PDF-urile binare produse de nodul Export (3 itemi, unul per document),\n// construiește arhiva cu zip-store inline (CRC32 + metoda STORE, fără npm) și\n// emite UN item final cu metadatele pentru Gmail Livrare ZIP.\nconst CRC_TABLE = (() => {\n  const t = new Int32Array(256);\n  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c; }\n  return t;\n})();\nfunction crc32(buf) { let c = -1; for (let i = 0; i < buf.length; i++) c = (c >>> 8) ^ CRC_TABLE[(c ^ buf[i]) & 0xFF]; return (c ^ -1) >>> 0; }\n\nconst fisiere = [];\nconst numeTraf = new Set();\nfor (const item of items) {\n  const nume = (item.json && item.json.nume_pdf) || ('document-' + fisiere.length + '.pdf');\n  if (numeTraf.has(nume)) throw new Error('nume PDF duplicat: ' + nume);\n  numeTraf.add(nume);\n  if (!item.binary || !item.binary.data) throw new Error('PDF lipsă pentru ' + nume);\n  const buf = await this.helpers.getBinaryDataBuffer(item.pairedItem !== undefined ? item.pairedItem : 0, 'data');\n  fisiere.push({ nume, buffer: buf });\n}\nif (fisiere.length !== 3) throw new Error('Se așteptau 3 PDF-uri, am primit: ' + fisiere.length);\n\nconst acum = new Date();\nconst timp = (acum.getHours() << 11) | (acum.getMinutes() << 5) | (acum.getSeconds() >> 1);\nconst data = (((acum.getFullYear() - 1980) & 0x7F) << 9) | ((acum.getMonth() + 1) << 5) | acum.getDate();\nconst bucati = []; const central = []; let offset = 0;\nfor (const f of fisiere) {\n  const nume = Buffer.from(f.nume, 'utf8');\n  const crc = crc32(f.buffer);\n  const local = Buffer.alloc(30);\n  local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt16LE(0x0800, 6);\n  local.writeUInt16LE(0, 8); local.writeUInt16LE(timp, 10); local.writeUInt16LE(data, 12);\n  local.writeUInt32LE(crc, 14); local.writeUInt32LE(f.buffer.length, 18); local.writeUInt32LE(f.buffer.length, 22);\n  local.writeUInt16LE(nume.length, 26); local.writeUInt16LE(0, 28);\n  bucati.push(local, nume, f.buffer);\n  const cd = Buffer.alloc(46);\n  cd.writeUInt32LE(0x02014b50, 0); cd.writeUInt16LE(20, 4); cd.writeUInt16LE(20, 6); cd.writeUInt16LE(0x0800, 8);\n  cd.writeUInt16LE(0, 10); cd.writeUInt16LE(timp, 12); cd.writeUInt16LE(data, 14); cd.writeUInt32LE(crc, 16);\n  cd.writeUInt32LE(f.buffer.length, 20); cd.writeUInt32LE(f.buffer.length, 24); cd.writeUInt16LE(nume.length, 28);\n  cd.writeUInt32LE(offset, 42);\n  central.push(Buffer.concat([cd, nume]));\n  offset += 30 + nume.length + f.buffer.length;\n}\nconst director = Buffer.concat(central);\nconst eocd = Buffer.alloc(22);\neocd.writeUInt32LE(0x06054b50, 0); eocd.writeUInt16LE(fisiere.length, 8); eocd.writeUInt16LE(fisiere.length, 10);\neocd.writeUInt32LE(director.length, 12); eocd.writeUInt32LE(offset, 16);\nconst arhiva = Buffer.concat([...bucati, director, eocd]);\n\n// primul item păstrează metadatele pentru Gmail (id_tranzactie, destinatar, etc.)\nconst meta = items[0].json;\nconst binar = await this.helpers.prepareBinaryData(arhiva, meta.zip_nume || (meta.id_tranzactie || 'autoact') + '.zip', 'application/zip');\nreturn [{ json: meta, binary: { data: binar } }];\n"
+      }
+    },
+    {
+      "id": "b7e5a000-0000-4000-8000-000000000020",
+      "name": "Gmail Livrare ZIP",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        4800,
+        300
+      ],
+      "parameters": {
+        "sendTo": "={{ $json.destinatar }}",
+        "subject": "AutoAct — actele tale pentru transcriere auto sunt gata (ZIP + factură)",
+        "emailType": "html",
+        "message": "=<p>Bună, {{ $json.nume_client }},</p><p>Pachetul tău de acte este gata și îl găsești atașat, împreună cu factura.</p><h3>Ce faci după ce printezi actele</h3><ol><li>Printează PDF-urile din arhivă.</li><li>Mergi ÎNTÂI la notar cu mașina și actele originale pentru autentificarea contractului.</li><li>Semnați amândoi în fața notarului.</li><li>Mergi la DRPCIV cu contractul autentificat, CI, CIV original și dovada plății taxei de transcriere.</li><li>Primești noua înmatriculare.</li></ol><p>Verifică toate datele înainte de printare — actele se emit exact cu datele confirmate de tine la pasul de verificare.</p><p>Cu stimă,<br><strong>Echipa AutoAct</strong><br>autoact.ro</p>",
+        "options": {
+          "appendAttribution": false
+        }
+      }
+    },
+    {
+      "id": "b7e5a000-0000-4000-8000-0000000000a1",
+      "name": "Sticky - Instalare Plati",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -220,
+        -80
+      ],
+      "parameters": {
+        "width": 560,
+        "height": 300,
+        "color": 4,
+        "content": "## INSTALARE — AutoAct Plăți + Documente (Netopia → SmartBill → Docs → ZIP)\\n1) n8n → ⋯ → **Import from File** → acest JSON.\\n2) **Schema DB:** rulează o dată module-5/plati-schema.sql (docker compose exec -T postgres psql -U autoact -d autoact).\\n3) **Env (docker-compose.yml):** NETOPIA_RSA_PRIVATE_KEY, NETOPIA_MPAY_SECRET, SMARTBILL_VAT_CODE, SMARTBILL_SERIE, GOOGLE_DOCS_TEMPLATE_CONTRACT, GOOGLE_DOCS_TEMPLATE_DRPCIV, GOOGLE_DOCS_TEMPLATE_DECLARATII.\\n4) **Credentials n8n:** SmartBill Basic Auth + Google OAuth2 (Drive + Docs scope-uri) — nodurile 15–18.\\n5) **Netopia:** URL de confirmare https://autoact.ro/webhook/netopia.\\n6) Activează workflow-ul."
+      }
+    },
+    {
+      "id": "b7e5a000-0000-4000-8000-0000000000a2",
+      "name": "Sticky - Semnătură",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        420,
+        560
+      ],
+      "parameters": {
+        "width": 420,
+        "height": 220,
+        "color": 5,
+        "content": "### Semnătura Netopia (nodul 3)\\n1) env_key = primii 256 bytes → RSA-OAEP-SHA256 cu cheia privată.\\n2) AES-256-CBC, IV = primele 16 bytes din AES key.\\n3) HMAC-SHA256 pe order_id|amount|currency|status cu MPAY_SECRET.\\nOrice eșec → răspuns 496, fără alertă admin.\\n⚠ Necesită NODE_FUNCTION_ALLOW_BUILTIN=fs,path,crypto (Modulul 3)."
+      }
+    },
+    {
+      "id": "b7e5a000-0000-4000-8000-0000000000a3",
+      "name": "Sticky - Idempotență",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1380,
+        560
+      ],
+      "parameters": {
+        "width": 460,
+        "height": 200,
+        "color": 6,
+        "content": "### Idempotență pe order_id (nodul 6)\\nCTE INSERT ... ON CONFLICT DO NOTHING + UNION fallback → mereu exact 1 rând: duplicat=0 (prima dată) sau duplicat=1 (retransmisie).\\nRetransmisiile Netopia mor aici — zero facturi duplicate."
+      }
+    },
+    {
+      "id": "b7e5a000-0000-4000-8000-0000000000a4",
+      "name": "Sticky - Generare Documente",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2820,
+        560
+      ],
+      "parameters": {
+        "width": 520,
+        "height": 220,
+        "color": 3,
+        "content": "### Generare Documente (nodurile 14–18)\\nTemplate-urile Google Docs NU se modifică niciodată: nodul 15 face o COPIE per document, nodul 16 aplică replaceAllText ×37, nodul 17 exportă PDF, nodul 18 ȘTERGE copia.\\nID-urile șabloanelor vin din env: GOOGLE_DOCS_TEMPLATE_CONTRACT / _DRPCIV / _DECLARATII.\\nZIP-ul (nodul 19) e construit inline (CRC32 + STORE, zero npm)."
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Netopia": {
+      "main": [
+        [
+          {
+            "node": "Parsare POST Netopia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsare POST Netopia": {
+      "main": [
+        [
+          {
+            "node": "Decriptare Semnătură",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decriptare Semnătură": {
+      "main": [
+        [
+          {
+            "node": "IF Semnătură Validă",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Semnătură Validă": {
+      "main": [
+        [
+          {
+            "node": "Idempotenta (Postgres)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Semnătură Invalidă",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Idempotenta (Postgres)": {
+      "main": [
+        [
+          {
+            "node": "IF Deja Procesată",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Deja Procesată": {
+      "main": [
+        [
+          {
+            "node": "Respond Deja Procesată",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Data Tranzacție (Postgres)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data Tranzacție (Postgres)": {
+      "main": [
+        [
+          {
+            "node": "IF Plată Confirmată",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Plată Confirmată": {
+      "main": [
+        [
+          {
+            "node": "Payload SmartBill",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Plată Respinsă",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Payload SmartBill": {
+      "main": [
+        [
+          {
+            "node": "SmartBill Factură",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SmartBill Factură": {
+      "main": [
+        [
+          {
+            "node": "Placeholder-e Docs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Placeholder-e Docs": {
+      "main": [
+        [
+          {
+            "node": "Copie Template (Drive)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Copie Template (Drive)": {
+      "main": [
+        [
+          {
+            "node": "Docs batchUpdate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Docs batchUpdate": {
+      "main": [
+        [
+          {
+            "node": "Export PDF (Drive)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Export PDF (Drive)": {
+      "main": [
+        [
+          {
+            "node": "Șterge Copia (Drive)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Șterge Copia (Drive)": {
+      "main": [
+        [
+          {
+            "node": "ZIP Pachet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ZIP Pachet": {
+      "main": [
+        [
+          {
+            "node": "Gmail Livrare ZIP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "autoact-plati-v1"
+  }
+}

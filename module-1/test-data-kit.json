@@ -1,0 +1,112 @@
+{
+  "disclaimer": "Date 100% fictive, generate algoritmic pentru testare. Orice coincidenta cu persoane reale este intamplatoare. NU utiliza CNP-uri reale in medii de test.",
+  "algoritm": "cheie 279146358279 | rest % 11 | rest 10 => cifra control 1",
+  "generat_la": "2026-09-26T08:20:50.396Z",
+  "intrari": [
+    {
+      "id_test": 1,
+      "rol": "Vanzator #1 (test)",
+      "cnp": "1750314411231",
+      "valid": true,
+      "derivat_din_cnp": {
+        "sex": "masculin",
+        "an_nastere": 1975,
+        "luna_nastere": 3,
+        "zi_nastere": 14,
+        "judet_nastere": 41
+      },
+      "nume_fictiv": "Popescu Andrei-Ionut",
+      "adresa_fictiva": "Str. Libertatii nr. 12, bl. A2, ap. 7",
+      "localitate": "Bucuresti (Sector 1)",
+      "judet": "Bucuresti Sector 1",
+      "serie_ci_fictiva": "RX123456",
+      "vin_fictiv": "VF1RFA00567890123",
+      "placuta_fictiva": "B-123-ABC",
+      "pret_test_ron": 49
+    },
+    {
+      "id_test": 2,
+      "rol": "Cumparator #1 (test)",
+      "cnp": "6010902122043",
+      "valid": true,
+      "derivat_din_cnp": {
+        "sex": "feminin",
+        "an_nastere": 2001,
+        "luna_nastere": 9,
+        "zi_nastere": 2,
+        "judet_nastere": 12
+      },
+      "nume_fictiv": "Marinescu Elena-Roxana",
+      "adresa_fictiva": "Calea Turzii nr. 88",
+      "localitate": "Cluj-Napoca",
+      "judet": "Cluj",
+      "serie_ci_fictiva": "YA234567",
+      "vin_fictiv": "WVWZZZ16Z12345678",
+      "placuta_fictiva": "CJ-204-XYZ",
+      "pret_test_ron": 49
+    },
+    {
+      "id_test": 3,
+      "rol": "Vanzator #2 (test)",
+      "cnp": "2881123360175",
+      "valid": true,
+      "derivat_din_cnp": {
+        "sex": "feminin",
+        "an_nastere": 1988,
+        "luna_nastere": 11,
+        "zi_nastere": 23,
+        "judet_nastere": 36
+      },
+      "nume_fictiv": "Ionescu Mihaela-Gabriela",
+      "adresa_fictiva": "Bd. Liviu Rebreanu nr. 4",
+      "localitate": "Timisoara",
+      "judet": "Timis",
+      "serie_ci_fictiva": "KP345678",
+      "vin_fictiv": "UU1HSDC0512345678",
+      "placuta_fictiva": "TM-88-DEF",
+      "pret_test_ron": 49
+    },
+    {
+      "id_test": 4,
+      "rol": "Cumparator #2 (test)",
+      "cnp": "5030530234568",
+      "valid": true,
+      "derivat_din_cnp": {
+        "sex": "masculin",
+        "an_nastere": 2003,
+        "luna_nastere": 5,
+        "zi_nastere": 30,
+        "judet_nastere": 23
+      },
+      "nume_fictiv": "Dumitru Alexandru-Mihai",
+      "adresa_fictiva": "Str. Pacurari nr. 21",
+      "localitate": "Iasi",
+      "judet": "Iasi",
+      "serie_ci_fictiva": "NT456789",
+      "vin_fictiv": "TMMA12A3D0K123456",
+      "placuta_fictiva": "IS-456-GHJ",
+      "pret_test_ron": 49
+    },
+    {
+      "id_test": 5,
+      "rol": "Test secol 1900 / Sector 5",
+      "cnp": "1650108450909",
+      "valid": true,
+      "derivat_din_cnp": {
+        "sex": "masculin",
+        "an_nastere": 1965,
+        "luna_nastere": 1,
+        "zi_nastere": 8,
+        "judet_nastere": 45
+      },
+      "nume_fictiv": "Georgescu Radu-Cristian",
+      "adresa_fictiva": "Bd. Dacia nr. 50",
+      "localitate": "Bucuresti (Sector 5)",
+      "judet": "Bucuresti Sector 5",
+      "serie_ci_fictiva": "ZA567890",
+      "vin_fictiv": "SALVA13B7FH123456",
+      "placuta_fictiva": "B-90-JKL",
+      "pret_test_ron": 49
+    }
+  ]
+}

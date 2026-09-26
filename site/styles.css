@@ -1,0 +1,203 @@
+/* ============================================================
+ * AutoAct | site | styles.css — temă completă, fără dependențe
+ * ============================================================ */
+:root {
+  --albastru: #1a73e8;
+  --albastru-închis: #1558b0;
+  --verde: #188038;
+  --verde-fundal: #e6f4ea;
+  --galben: #f9ab00;
+  --galben-fundal: #fef7e0;
+  --rosu: #d93025;
+  --rosu-fundal: #fce8e6;
+  --text: #202124;
+  --text-slabit: #5f6368;
+  --bordura: #dadce0;
+  --fundal: #f8f9fa;
+  --raza: 12px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text);
+  background: var(--fundal);
+  line-height: 1.55;
+}
+
+main { max-width: 760px; margin: 0 auto; padding: 0 16px 48px; }
+
+/* ---------- Hero ---------- */
+.hero {
+  background: linear-gradient(135deg, var(--albastru) 0%, var(--albastru-închis) 100%);
+  color: #fff;
+  padding: 48px 16px 40px;
+  text-align: center;
+}
+.hero h1 { margin: 0 0 8px; font-size: clamp(1.4rem, 4vw, 2.2rem); }
+.hero-sub { margin: 0 auto; max-width: 640px; opacity: .95; }
+
+/* ---------- Carduri ---------- */
+.card {
+  background: #fff;
+  border-radius: var(--raza);
+  box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 4px 14px rgba(0,0,0,.06);
+  padding: 28px;
+  margin-top: -24px;
+}
+.card h2 { margin-top: 0; }
+
+.hint { color: var(--text-slabit); font-size: .92em; }
+.centrat { text-align: center; }
+
+/* ---------- Checkbox-uri ---------- */
+.check {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 10px 12px; border: 1px solid var(--bordura);
+  border-radius: 8px; margin: 8px 0; cursor: pointer;
+}
+.check:hover { background: var(--fundal); }
+.check input { margin-top: 4px; transform: scale(1.15); }
+
+/* ---------- Upload ---------- */
+.grid-upload {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px; margin: 16px 0;
+}
+.upload-tile {
+  border: 2px dashed var(--bordura); border-radius: 10px;
+  padding: 14px 10px; text-align: center; cursor: pointer;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.upload-tile:hover { border-color: var(--albastru); background: #f0f6ff; }
+.upload-tile input[type="file"] { display: none; }
+.upload-titlu { font-weight: 600; font-size: .9em; }
+.upload-stare { font-size: .78em; color: var(--text-slabit); }
+.upload-tile.incărcat { border-style: solid; border-color: var(--verde); background: var(--verde-fundal); }
+.upload-tile.incărcat .upload-stare { color: var(--verde); font-weight: 600; }
+
+/* ---------- Pași & navigare ---------- */
+.campionar-nav, .chestionar-nav { display: flex; justify-content: space-between; gap: 12px; margin-top: 20px; }
+.chestionar-nav #btn-next { margin-left: auto; }
+
+.btn {
+  border: none; border-radius: 8px; padding: 12px 24px;
+  font-size: 1em; font-weight: 600; cursor: pointer;
+  transition: background .15s ease, opacity .15s ease;
+}
+.btn-primar { background: var(--albastru); color: #fff; }
+.btn-primar:hover { background: var(--albastru-închis); }
+.btn-secondar { background: #fff; color: var(--albastru); border: 1px solid var(--bordura); }
+.btn-secondar:hover { background: var(--fundal); }
+
+.btn-plata {
+  display: block; width: 100%; margin: 18px 0 6px;
+  background: var(--verde); color: #fff; font-size: 1.15em; padding: 16px;
+  letter-spacing: .5px;
+}
+.btn-plata:not(:disabled):hover { filter: brightness(.95); }
+.btn-plata:disabled {
+  background: #b0b6bd; color: #e8eaed; cursor: not-allowed;
+  position: relative; overflow: hidden;
+}
+.btn-plata:disabled::after {
+  content: 'Bifează acordul și corectează câmpurile galbene';
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,.25); font-size: .8em; font-weight: 500; letter-spacing: 0;
+}
+
+.progres { height: 6px; background: var(--bordura); border-radius: 3px; overflow: hidden; margin-top: 18px; }
+#progres-bara { height: 100%; width: 0; background: var(--albastru); transition: width .25s ease; }
+
+/* ---------- Câmpuri ---------- */
+.camp { display: block; margin: 14px 0; }
+.camp span { display: block; font-weight: 600; margin-bottom: 4px; font-size: .92em; }
+.camp input {
+  width: 100%; padding: 12px; border: 1px solid var(--bordura);
+  border-radius: 8px; font-size: 1em;
+}
+.camp input:focus { outline: 2px solid var(--albastru); border-color: transparent; }
+
+/* ---------- Ecran preview: header ---------- */
+.preview-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.badge-scor {
+  background: var(--galben-fundal); color: #b06000;
+  padding: 6px 14px; border-radius: 20px; font-size: .9em; white-space: nowrap;
+}
+.badge-scor.ok { background: var(--verde-fundal); color: var(--verde); }
+.badge-scor.rau { background: var(--rosu-fundal); color: var(--rosu); }
+
+.mesaj-avertisment {
+  background: var(--galben-fundal); border-left: 4px solid var(--galben);
+  padding: 10px 14px; border-radius: 6px; margin: 14px 0 0;
+}
+
+/* ---------- Taburi ---------- */
+.taburi { display: flex; gap: 4px; margin: 20px 0 0; border-bottom: 2px solid var(--bordura); flex-wrap: wrap; }
+.tab {
+  border: none; background: transparent; padding: 10px 16px;
+  font-size: .95em; font-weight: 600; color: var(--text-slabit); cursor: pointer;
+  border-bottom: 3px solid transparent; margin-bottom: -2px;
+}
+.tab:hover { color: var(--albastru); }
+.tab.tab-activ { color: var(--albastru); border-bottom-color: var(--albastru); }
+.tab .bulina { font-size: .8em; margin-left: 4px; }
+
+/* ---------- Rânduri de câmpuri ---------- */
+.rand-camp { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid #f1f3f4; }
+.rand-camp .eticheta { width: 180px; font-weight: 600; font-size: .88em; color: var(--text-slabit); flex-shrink: 0; }
+.rand-camp .valoare-wrap { flex: 1; display: flex; gap: 8px; align-items: center; }
+
+.rand-camp input.valoare {
+  flex: 1; padding: 9px 10px; border: 1px solid var(--bordura);
+  border-radius: 6px; font-size: .95em; min-width: 0;
+}
+.rand-camp input.valoare:focus { outline: 2px solid var(--albastru); border-color: transparent; }
+.rand-camp input.valoare:disabled { background: #f8f9fa; color: var(--text); }
+
+/* câmp galben = nesigur, editabil */
+.rand-camp.nesigur { background: var(--galben-fundal); border-radius: 6px; }
+.rand-camp.nesigur input.valoare { border: 2px solid var(--galben); background: #fff; }
+
+/* câmp roșu = invalid (blochează plata) */
+.rand-camp.invalid { background: var(--rosu-fundal); border-radius: 6px; }
+.rand-camp.invalid input.valoare { border: 2px solid var(--rosu); background: #fff; }
+
+.badge {
+  font-size: .72em; font-weight: 700; padding: 3px 8px;
+  border-radius: 10px; white-space: nowrap; flex-shrink: 0;
+}
+.badge-verde { background: var(--verde-fundal); color: var(--verde); }
+.badge-galben { background: var(--galben); color: #fff; }
+.badge-rosu { background: var(--rosu); color: #fff; }
+
+.eroare-camp { color: var(--rosu); font-size: .8em; width: 100%; padding-left: 190px; }
+
+/* ---------- Rezumat & acord ---------- */
+.rezumat-campuri { margin: 16px 0 0; font-size: .92em; }
+.rezumat-campuri .rez-galben { color: #b06000; }
+.rezumat-campuri .rez-verde { color: var(--verde); }
+.rezumat-campuri .rez-rosu { color: var(--rosu); }
+
+.acord-box {
+  border: 2px solid var(--bordura); border-radius: 10px;
+  padding: 14px; margin-top: 16px; background: var(--fundal);
+}
+.acord-box .check { border: none; margin: 0; padding: 0; background: transparent; }
+
+.eroare-text { color: var(--rosu); }
+
+/* ---------- Footer ---------- */
+footer { text-align: center; color: var(--text-slabit); padding: 24px 16px; font-size: .9em; }
+footer a { color: var(--text-slabit); }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 560px) {
+  .card { padding: 18px; }
+  .rand-camp { flex-direction: column; align-items: stretch; }
+  .rand-camp .eticheta { width: auto; }
+  .eroare-camp { padding-left: 0; }
+  .btn-plata:disabled::after { font-size: .7em; padding: 0 6px; }
+}

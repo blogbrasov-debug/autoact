@@ -1,0 +1,97 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://autoact.ro/schemas/profil-tranzactie-v1.json",
+  "title": "Profil Unic de Tranzacție Auto",
+  "type": "object",
+  "required": ["id_tranzactie", "stare", "creat_la", "date_vanzator", "date_cumparator", "date_vehicul", "date_tranzactie"],
+  "additionalProperties": false,
+  "properties": {
+    "id_tranzactie": { "type": "string", "pattern": "^tr_[a-f0-9]{16}$" },
+    "stare": {
+      "type": "string",
+      "enum": [
+        "webhook_primit",
+        "ocr_in_procesare",
+        "ocr_gata",
+        "validare_ok",
+        "cerere_corectii_client",
+        "platit",
+        "livrat",
+        "epirat_gdpr"
+      ]
+    },
+    "creat_la": { "type": "string", "format": "date-time" },
+    "platit_la": { "type": ["string", "null"], "format": "date-time" },
+
+    "date_vanzator": { "$ref": "#/definitions/persoana" },
+    "date_cumparator": { "$ref": "#/definitions/persoana" },
+
+    "date_vehicul": {
+      "type": "object",
+      "required": [
+        "marca", "model", "vin", "numar_inmatriculare", "an_fabricatie",
+        "cilindree_cm", "putere_kw", "masa_maxima_kg", "odometru_km", "tip_combustibil"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "marca": { "type": "string", "minLength": 2 },
+        "model": { "type": "string", "minLength": 1 },
+        "vin": {
+          "type": "string",
+          "pattern": "^[A-HJ-NPR-Z0-9]{17}$",
+          "description": "17 caractere, literele I, O și Q sunt interzise (ISO 3779)."
+        },
+        "numar_inmatriculare": { "type": "string", "pattern": "^[A-Z]{1,2}-[0-9]{2,3}-[A-Z]{3}$" },
+        "an_fabricatie": { "type": "integer", "minimum": 1950, "maximum": 2027 },
+        "cilindree_cm": { "type": "integer", "minimum": 49, "maximum": 30000 },
+        "putere_kw": { "type": "integer", "minimum": 3, "maximum": 1500 },
+        "masa_maxima_kg": { "type": "integer", "minimum": 300, "maximum": 20000 },
+        "odometru_km": { "type": ["integer", "null"], "minimum": 0, "maximum": 2000000 },
+        "tip_combustibil": { "type": "string", "enum": ["benzina", "motorina", "hibrid", "electric", "gpl", "altul"] },
+        "certificat_inmatriculare_serie": { "type": "string", "pattern": "^[A-Z]{2}[0-9]{6}$" }
+      }
+    },
+
+    "date_tranzactie": {
+      "type": "object",
+      "required": ["suma_ron", "data_vanzarii", "localitate_incheiere", "este_persoana_fizica", "acord_client"],
+      "additionalProperties": false,
+      "properties": {
+        "suma_ron": { "type": "number", "exclusiveMinimum": 0 },
+        "moneda": { "type": "string", "enum": ["RON"], "default": "RON" },
+        "data_vanzarii": { "type": "string", "format": "date" },
+        "localitate_incheiere": { "type": "string", "minLength": 2 },
+        "siruta": { "type": ["string", "null"], "description": "Cod SIRUTA validat în Modulul 2, pas 3." },
+        "scutire_taxa_sub_24_luni": { "type": "boolean", "default": false },
+        "este_persoana_fizica": { "type": "boolean", "const": true },
+        "acord_client": {
+          "type": "boolean",
+          "const": true,
+          "description": "Checkbox-ul legal de pe ecranul de pre-vizualizare (Modulul 6). Nu poate fi livrat fără asumare."
+        },
+        "id_plata": { "type": ["string", "null"] },
+        "scor_calitate": { "type": "number", "minimum": 0, "maximum": 100 }
+      }
+    }
+  },
+
+  "definitions": {
+    "persoana": {
+      "type": "object",
+      "required": ["nume_complet", "cnp", "serie_ci", "numar_ci", "adresa", "localitate", "judet", "email"],
+      "additionalProperties": false,
+      "properties": {
+        "nume_complet": { "type": "string", "minLength": 4 },
+        "cnp": { "type": "string", "pattern": "^[1-6][0-9]{12}$" },
+        "serie_ci": { "type": "string", "pattern": "^[A-Z]{2}$" },
+        "numar_ci": { "type": "string", "pattern": "^[0-9]{6}$" },
+        "adresa": { "type": "string", "minLength": 5 },
+        "localitate": { "type": "string", "minLength": 2 },
+        "judet": { "type": "string", "minLength": 2 },
+        "siruta": { "type": ["string", "null"] },
+        "telefon": { "type": "string", "pattern": "^\\+40[0-9]{9}$" },
+        "email": { "type": "string", "format": "email" }
+      }
+    }
+  }
+}

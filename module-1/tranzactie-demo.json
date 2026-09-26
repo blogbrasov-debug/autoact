@@ -1,0 +1,55 @@
+{
+  "id_tranzactie": "tr_ab12cd34ef56ab12",
+  "stare": "validare_ok",
+  "creat_la": "2026-09-26T08:20:50.838Z",
+  "platit_la": null,
+  "date_vanzator": {
+    "nume_complet": "Popescu Andrei-Ionut",
+    "cnp": "1750314411231",
+    "serie_ci": "RX",
+    "numar_ci": "123456",
+    "adresa": "Str. Libertatii nr. 12, bl. A2, ap. 7",
+    "localitate": "Bucuresti (Sector 1)",
+    "judet": "Bucuresti Sector 1",
+    "siruta": null,
+    "telefon": "+40700001000",
+    "email": "vanzator1@example.com"
+  },
+  "date_cumparator": {
+    "nume_complet": "Marinescu Elena-Roxana",
+    "cnp": "6010902122043",
+    "serie_ci": "YA",
+    "numar_ci": "234567",
+    "adresa": "Calea Turzii nr. 88",
+    "localitate": "Cluj-Napoca",
+    "judet": "Cluj",
+    "siruta": null,
+    "telefon": "+40700002000",
+    "email": "cumparator2@example.com"
+  },
+  "date_vehicul": {
+    "marca": "Dacia",
+    "model": "Logan",
+    "vin": "VF1RFA00567890123",
+    "numar_inmatriculare": "B-123-ABC",
+    "an_fabricatie": 2016,
+    "cilindree_cm": 1461,
+    "putere_kw": 55,
+    "masa_maxima_kg": 1730,
+    "odometru_km": 154000,
+    "tip_combustibil": "motorina",
+    "certificat_inmatriculare_serie": "AB123456"
+  },
+  "date_tranzactie": {
+    "suma_ron": 9500,
+    "moneda": "RON",
+    "data_vanzarii": "2026-09-26",
+    "localitate_incheiere": "București",
+    "siruta": "179132",
+    "scutire_taxa_sub_24_luni": false,
+    "este_persoana_fizica": true,
+    "acord_client": false,
+    "id_plata": null,
+    "scor_calitate": 97.5
+  }
+}
