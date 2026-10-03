@@ -21,7 +21,8 @@
 | NAP (CIF, adresă, telefon) | ⚠️ **PLACEHOLDER** — blochează deploy-ul |
 | Pagini `/termeni` și `/gdpr` | ❌ **nu există** — linkuri moarte în footer |
 | Conturi externe (Netopia, SmartBill, OpenAI, Gemini, Google) | ❌ de creat |
-| Git remote + push | ❌ făcut un singur commit local, nimic încă nepublicat |
+| Git remote + push | ✅ repo public `blogbrasov-debug/autoact`, suita de 14 pași verde în CI |
+| Identitate vizuală Facebook (5 materiale la dimensiunile Meta) | ✅ generate în `brand/png/` |
 
 ---
 
@@ -76,7 +77,7 @@ node site/test-banca-cifre.js     # trebuie să NU mai afișeze avertismentul de
 | OpenAI | cheie API (Vision OCR) | n8n Credentials |
 | Google AI Studio | cheie Gemini | n8n Credentials |
 | Google (Docs + Gmail) | cont, OAuth2, 3 șabloane create din `module-2/sabloane/` | n8n Credentials + `.env` |
-| Cloudflare/ClouDNS | `autoact.ro` → IP-ul VM-ului | DNS |
+| Cloudflare (DNS + hosting) | `autoact.eu` → Cloudflare Pages (site); `api.autoact.eu` → IP-ul VM-ului | DNS |
 
 ⚠️ **Contul Google** e singurul careCer **creare manuală a celor 3 șabloane** — instrucțiunile sunt
 în `module-2/sabloane/README.md`. Fără ele, nodul „Placeholder-e Docs" nu are ce înlocui.
@@ -85,7 +86,7 @@ node site/test-banca-cifre.js     # trebuie să NU mai afișeze avertismentul de
 
 ```bash
 cd module-3
-./deploy-autoact.sh ubuntu@IP_PUBLIC_AUTOACT autoact.ro
+./deploy-autoact.sh ubuntu@IP_PUBLIC_AUTOACT autoact.eu
 ```
 
 Scriptul: copiază compose + Caddyfile + site-ul generat, generează `.env` cu secrete **aleatorii** pe server,
@@ -96,59 +97,71 @@ credential-urile).
 
 ### Pasul 3.bis — Hosting și domeniu (decizia, cu motivul)
 
-**Hosting: Caddy pe același VM Oracle. Cost 0 RON, niciun cont nou, niciun serviciu cu plată.**
+**Hosting: 0 RON, cu uz comercial permis, în două bucăți — site-ul pe Cloudflare Pages,
+stiva (n8n + Postgres + API) pe Caddy în VM-ul Oracle.**
 
-| Variantă | Cost | Uz comercial | Conturi noi | Verdict |
-|---|---|---|---|---|
-| **Caddy pe același VM** | **0 RON** | nelimitat | **niciunul** | **ales** |
-| GitHub Pages | 0 RON | permis | cont GitHub | alternativă validă |
-| Cloudflare Pages | 0 RON | permis | cont Cloudflare | alternativă validă |
-| Vercel Hobby | 0 RON | **interzis** | cont Vercel | **exclus** |
+| Piesa | Unde stă | Cost | Uz comercial | Conturi noi | Verdict |
+|---|---|---|---|---|---|
+| Site static (3 pagini) | **Cloudflare Pages** | **0 RON** | **permis** | cont Cloudflare | **ales** |
+| n8n + Postgres + webhook | **Caddy pe același VM Oracle** | 0 RON | nelimitat | **niciunul** | **ales** |
+| Netlify Free (în loc de Pages) | Netlify | 0 RON | permis | cont Netlify | alternativă validă |
+| GitHub Pages | GitHub | 0 RON | **interzis** | cont GitHub | **exclus** |
+| Vercel Hobby | Vercel | 0 RON | **interzis** | cont Vercel | **exclus** |
 
-De ce Caddy pe același VM: site-ul e static și are nevoie de TLS, de aceea și de un server. Caddy
-e deja în stivă, pentru TLS-ul webhook-urilor. Punând și paginile în același loc, un singur
-domeniu deservește **site-ul și API-ul**, cu un singur certificat. Alternativele ar împărți
-domeniul în două destinații DNS și ar cere încă un cont — pentru un site de 3 pagini.
+De ce Cloudflare Pages pentru site: planul Free permite explicit uz comercial, include TLS,
+dă 500 builduri/lună și până la 100 de domenii per proiect, fără card de plată. Site-ul e
+static, are 3 pagini — îl poți publica azi, în mod demo (`WEBHOOK_URL` gol), fără să
+aștepți serverul.
 
-Vercel Hobby e exclus pentru că planul e limitat explicit la proiecte **personale și
-necomerciale**, iar AutoAct vinde la 49 RON.
+De ce Caddy rămâne pentru stivă: n8n și Postgres nu încap pe o găzduire de pagini statice, iar
+webhook-ul de plăți trebuie să aibă TLS real. Caddy e deja în `docker-compose.yml`.
 
-**Domeniu: `0 RON` nu mai există.** Freenom a oprit înregistrările, iar operatorul `.tk` a ieșit
-din piață. Un domeniu costă câteva zeci de lei pe an — deci promisiunea e **0 RON operațional**,
-nu **0 RON de lansare**. Prefer să spun asta decât să promit ceva fals.
+⚠️ **GitHub Pages e exclus**, deși e gratis și pare ideal: condițiile sale spun explicit că
+platforma nu e destinată și nu e permisă ca serviciu de găzduire pentru afaceri online
+(docs.github.com/pages → *Limits*: „not intended for or allowed to be used as a free
+web-hosting service to run your online business"). Un site care vinde la 49 RON intră
+exact în acea excludere. Vercel Hobby are aceeași limitare, declarată mai direct.
+
+**Două adrese, un singur domeniu:** `autoact.eu` → site (Cloudflare Pages),
+`api.autoact.eu` → VM (Caddy → n8n). Clientul nu vede diferența; eu câștig că site-ul rămâne
+disponibil chiar dacă Oracle îți recicla instanța (vezi §2.bis).
 
 ### Starea reală a numelui „AutoAct" — verificată
 
-Interogat pe 3 octombrie 2026 (DNS-over-HTTPS + RDAP, nu memorie):
+Interogat pe 3 octombrie 2026, nu din memorie:
 
-| Nume | Stare |
-|---|---|
-| **autoact.ro** | **LIBER** |
-| **autoact.eu** | **LIBER** |
-| autoact.com | ocupat (confirmat RDAP) |
-| autoact.org | ocupat (141.8.195.125) |
-| autoact.app | ocupat |
-
-### Recomandare: `.ro`, cu `.eu` ca rezervă
-
-| | `.ro` | `.eu` |
+| Nume | Sursă | Stare |
 |---|---|---|
-| Cost | 12 EUR + TVA/an (tarif oficial RoTLD); ~40 lei/an la registrar | de la $1.79 la înregistrare, reînnoire uzual $5–10 (~25–50 lei) |
-| Cerință | **CUI/PFA al registrantului** | firmă stabilită în UE sau cetățean UE — o firmă românească se încadrează |
-| Date cerute | complete + verificare RoTLD | complete, cu posibilă verificare ulterioară (EURid) |
-| Semnal pentru clientul RO | **maxim** | bun, dar mai vag |
+| **autoact.eu** | WHOIS EURid (`whois.eu:43`) | **AVAILABLE** |
+| **autoact.ro** | DNS-over-HTTPS + RDAP | **LIBER** |
+| autoact.org | DNS (141.8.195.125) | ocupat |
+| autoact.com | RDAP | ocupat |
+| autoact.app | RDAP/DNS | ocupat |
 
-**Alege `.ro`.** Clientul plătește în RON, cu documente românești, într-un context în care
-`.ro` e extensia pe care o recunoaște imediat. Pentru cine plătește 49 RON către un serviciu
-necunoscut, domeniul e primul semn de încredere — iar `.eu` sugerează extindere europeană,
-care aici ar fi o promisiune pe care nu o poți onora.
+`org` nu e o opțiune: e ocupat, și nici nu e extensia potrivită pentru un serviciu
+comercial adresat pieței din România.
 
-⚠️ **Ambele nume sunt libere *acum* și pot fi luate de oricine în orice moment.** Înregistrează
-cât ai nevoie de CUI; nu amâna până când totul e gata de lansat.
+### Decizie: acum `.eu`, cu `.ro` după CUI
 
-**`.eu` ca rezervă** pentru cazul în care CUI-ul întârzie: îndeplinește cerința de „firmă
-stabilită în UE" și nu are condiția de CUI. Registrează-l în aceeași zi, într-un cont
-separat, ca să nu-l pierzi.
+Bugetul e de 2 EUR, iar `.eu` intră în el chiar la prima înregistrare:
+
+| | `.eu` — alegem **acum** | `.ro` — după CUI |
+|---|---|---|
+| Preț anul 1 | **$1.79** (Spaceship, cod promo `DOM80`, limită 1/client) | 12 EUR + TVA/an (tarif oficial RoTLD) |
+| În lei (curs ECB 2 oct 2026: 1 EUR = 1.1225 USD) | ≈ **1,59 €**; cu TVA 19% ≈ **1,90 €** | ~55 lei/an |
+| Reînnoire | $5.68/an ≈ 5,06 € | 12 EUR + TVA |
+| Eligibilitate | **cetățean UE indiferent de reședință**, rezident UE sau organizație stabilită în UE (EURid, din 2 aug 2021) | **CUI/PFA al registrantului** |
+| Ce înseamnă pentru tine | **persoană fizică română e eligible, fără CUI și fără firmă** | nevoie de CUI → abia după NAP |
+
+⚠️ **Prețul de $1.79 e promoțional și valabil un singur an** — reînnoirea e $5.68. Bugetă cei
+2 EUR pentru **primul an**; de acolo încolo e o decizie de business, nu de lansare.
+
+⚠️ **`autoact.eu` e liber *acum* și poate fi luat de oricine în orice moment.** Cumpără-l
+înainte să te ocupi de orice altceva.
+
+`.ro` rămâne obiectivul de mai târziu, imediat ce ai CUI-ul: e semnul maxim de încredere
+pentru cine plătește 49 RON în RON. Până atunci, `.eu` nu blochează nimic — toate adresele
+din cod sunt deja migrate pe `autoact.eu`.
 
 ### Pasul 4 — Baza de date + workflow-uri (ordine fixă)
 
@@ -169,7 +182,9 @@ Apoi, în n8n: **⋯ → Import from File** → `module-2/autoact-workflow.json`
 
 1. `site/config.js` → `WEBHOOK_URL` = Production URL-ul nodului „Webhook UI" (pasul 6 îți dă URL-ul).
 2. `node site/construieste-inline.js` → generează `index.html`, `contact.html`, `demo-standalone.html`.
-3. Upload pe hosting static (GitHub Pages / Netlify Drop / Cloudflare Pages / block Caddy).
+3. Publică site-ul pe **Cloudflare Pages** (uz comercial permis, fără card): proiect nou →
+   „Upload assets" → încarcă `site/dist/`. Alternativa gratuită e Netlify Drop; **nu**
+   GitHub Pages (interzis comercial — vezi §3.bis).
 
 ### Pasul 7 — Smoke test (înainte de GO, obligatoriu)
 
@@ -177,7 +192,7 @@ Apoi, în n8n: **⋯ → Import from File** → `module-2/autoact-workflow.json`
 - Verifică manual: contractul are datele corecte, factura are **CIF-ul din NAP**, VIN-ul e valid,
   și **nu s-a generat factură duplicată** la retransmitere (retrigger-ează webhook-ul Netopia).
 - Verifică job-ul GDPR: după 48h de la livrare, datele sunt epurate.
-- Verifică `curl -I https://autoact.ro` → TLS valid, redirect 80→443.
+- Verifică `curl -I https://autoact.eu` → TLS valid, redirect 80→443.
 
 ---
 
@@ -205,7 +220,7 @@ riscă să-și vadă VM-ul oprit fără un motiv vizibil. Nu e factură — e di
 serviciului și zile de refacere.
 
 Cum te protejezi: după deploy, verifică weekly în Oracle Console starea
-instantei și pe un job săptămânal care face un `curl` pe `autoact.ro` (deci
+instantei și pe un job săptămânal care face un `curl` pe `api.autoact.eu` (deci
 n8n execută ceva și contul nu e „idle"). Un ping real de săptămânal e suficient.
 
 **b) Limita Always Free s-a înjumătățit.** Pe **15 iunie 2026**, Oracle a redus
@@ -255,10 +270,11 @@ un card de plată legat la cont — Oracle nu notifică înainte de a taxa.
 | 3 | Conturi Netopia/SmartBill/Google | Fondator | pașii 2, 6, 7 |
 | 4 | 3 șabloane Google Docs create | Fondator | pasul 6 |
 | 5 | Regim TVA confirmat | Contabil | prima factură |
-| 6 | DNS `autoact.ro` → VM | Fondator | pasul 3 (Caddy emite TLS doar cu DNS valid)| 10 | Domeniu înregistrat (`.ro` + rezervă `.eu`) | Fondator | pasul 3 (fără domeniu, Caddy nu poate emite TLS) |
-| 7 | `.env` de pe server salvat local | Fondator | **pierderea credential-urilor n8n** |
-| 8 | Git remote + push | Fondator | CI, istoric, backup |
-| 9 | Reclaim pe cont inactiv | Fondator | continuitate (vezi §2.bis) |
+| 6 | Domeniu `autoact.eu` înregistrat (≈1,59 €) | Fondator | pasul 3 (fără domeniu, Caddy nu poate emite TLS) |
+| 7 | DNS `autoact.eu` → Pages, `api.autoact.eu` → VM | Fondator | pasul 3 (Caddy emite TLS doar cu DNS valid) |
+| 8 | `.env` de pe server salvat local | Fondator | **pierderea credential-urilor n8n** |
+| 9 | Cloudflare Pages: proiect creat, site publicat | Fondator | pasul 5 (site-ul rămâne local, nevizibil) |
+| 10 | Reclaim pe cont inactiv | Fondator | continuitate (vezi §2.bis) |
 
 ---
 

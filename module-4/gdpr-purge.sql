@@ -108,7 +108,7 @@ SELECT 'log_id', (SELECT id_rulare FROM logare);
 COMMIT;
 
 -- Ieșirea query-ului (3 rânduri metrică/valoare) poate fi trimisă în n8n
--- către founder@autoact.ro ca e-mail de audit zilnic — nu e alertă de
+-- către founder@autoact.eu ca e-mail de audit zilnic — nu e alertă de
 -- intervenție, doar dovada că job-ul a rulat.
 
 -- Listingul fișierelor fizice de șters de pe disc (pentru pasul Code):

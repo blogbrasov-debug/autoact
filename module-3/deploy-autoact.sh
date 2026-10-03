@@ -5,7 +5,7 @@
 #
 # Folosire (de pe calculatorul LOCAL, din directorul module-3/):
 #   chmod +x deploy-autoact.sh
-#   ./deploy-autoact.sh ubuntu@IP_PUBLIC_AUTOACT autoact.ro
+#   ./deploy-autoact.sh ubuntu@IP_PUBLIC_AUTOACT autoact.eu
 #
 # Ce face, în ordine:
 #   1. copiază pe server: docker-compose.yml, caddy/Caddyfile;
@@ -19,7 +19,7 @@
 set -euo pipefail
 
 if [ "$#" -lt 2 ]; then
-  echo "Folosire: $0 <user@host> <domeniu>   (ex: ./deploy-autoact.sh ubuntu@1.2.3.4 autoact.ro)"
+  echo "Folosire: $0 <user@host> <domeniu>   (ex: ./deploy-autoact.sh ubuntu@1.2.3.4 autoact.eu)"
   exit 1
 fi
 

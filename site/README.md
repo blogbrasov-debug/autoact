@@ -8,12 +8,16 @@ Orice hosting static funcționează — urci conținutul folderului `site/`:
 
 | Provider | Pași | Domeniu |
 |---|---|---|
-| **GitHub Pages** (recomandat) | Push la repo → Settings → Pages → Branch `main` / folder `/site` (sau repo dedicat `autoact-site`) | `https://user.github.io/autoact-site/` |
+| **Cloudflare Pages** (recomandat) | cont gratuit → Workers & Pages → Create → Pages → Git → repo-ul → build: `bash -c "mkdir -p dist && cp site/*.html site/*.js site/styles.css dist/ && rm -f dist/*.sablon.html dist/test-*.js dist/construieste-inline.js"` → output `dist` | `https://autoact.eu` (domeniu propriu, TLS inclus) |
 | **Netlify Drop** | netlify.com/drop → tragi folderul `site/` | `https://nume.netlify.app` |
-| **Cloudflare Pages** | Dashboard → Pages → Upload assets → folder `site/` | `https://autoact.pages.dev` |
-| **Oracle A1** (stack-ul Modulul 3) | Adaugă un site block în Caddyfile servind `/var/www/autoact` | `https://autoact.ro` |
+| **Oracle A1** (stack-ul Modulul 3) | Adaugă un site block în Caddyfile servind `/var/www/autoact` | `https://autoact.eu` |
 
-După deploy: editezi `config.js` și pui `WEBHOOK_URL` = Production URL-ul real al nodului Webhook UI (`https://domeniul.ro/webhook/test-ui`).
+⚠️ **GitHub Pages e exclus**: [limits of GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits)
+interzice explicit „free web-hosting service to run your online business, e-commerce site" —
+AutoAct vinde, deci planul gratuit nu se aplică. Vercel Hobby are aceeași restricție
+(necomercial). Cloudflare Pages și Netlify Free permit uz comercial pe plan gratuit.
+
+După deploy: editezi `config.js` și pui `WEBHOOK_URL` = Production URL-ul real al nodului Webhook UI (`https://api.autoact.eu/webhook/test-ui`). Lăsat gol, site-ul rulează în **mod demo**, fără backend.
 
 ## Prețul: o singură cifră în tot proiectul (banca de cifre)
 
@@ -72,7 +76,7 @@ Testul se autoverifică prin 7 mutații de cifră și 5 de NAP: dacă cineva scr
 
 ## Notă demo
 
-`config.js` vine cu `WEBHOOK_URL` setat pe domeniul placeholder → pagina rulează în **mod demo** (fără server): butonul „Verifică datele" deschide ecranul Zero-Refund cu datele din `demo-data.js`. Imedi după ce pui URL-ul real în `config.js`, fluxul real se activează automat.
+`config.js` vine cu `WEBHOOK_URL` **gol** → pagina rulează în **mod demo** (fără server): butonul „Verifică datele" deschide ecranul Zero-Refund cu datele din `demo-data.js`. Imediat după ce pui URL-ul real în `config.js`, fluxul real se activează automat. Verificarea e pe URL-ul gol, nu pe un domeniu anume — nu se strică la schimbarea domeniului.
 
 Compatibilitatea validatorilor UI ↔ nodul n8n e testată de `node verifica-ui-validare.js` (rădăcina proiectului).
 

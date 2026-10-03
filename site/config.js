@@ -1,7 +1,9 @@
 /* AutoAct | site | config.js
  * Unicul fișier de editat la deploy.
  * WEBHOOK_URL = Production URL-ul nodului „Webhook UI" din workflow-ul n8n
- * (module-2/autoact-workflow.json): https://domeniul-tau.ro/webhook/test-ui
+ * (module-2/autoact-workflow.json): https://api.autoact.eu/webhook/test-ui
+ * GOAL = mod demo: pagina rulează fără server (previzualizare din
+ * demo-data.js). Abia după ce pui URL-ul real, fluxul real se activează.
  *
  * NAP = Nume, Adresă, Punct de contact. Apare în footer, pe pagina de
  * contact și în JSON-LD (Organization) — totul se generează din aici,
@@ -14,7 +16,7 @@
  * SMARTBILL_VAT_CODE=<NAP.CIF>, altfel factura iese cu alt CIF.
  */
 window.AUTOACT_CONFIG = {
-  WEBHOOK_URL: 'https://autoact.ro/webhook/test-ui',
+  WEBHOOK_URL: '',
   PRET_RON: 49,
   NAP: {
     DENUMIRE: 'AutoAct',
@@ -22,7 +24,7 @@ window.AUTOACT_CONFIG = {
     REG_COM: 'J00/000/0000',    // ← înlocuiește (placeholder)
     ADRESA: 'Str. Exemplu 1, Sector 1, București', // ← înlocuiește
     TELEFON: '+40 700 000 000',  // ← înlocuiește
-    EMAIL: 'contact@autoact.ro',
-    SITE: 'https://autoact.ro'
+    EMAIL: 'contact@autoact.eu',
+    SITE: 'https://autoact.eu'
   }
 };

@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://autoact.ro/schemas/profil-tranzactie-v1.json",
+  "$id": "https://autoact.eu/schemas/profil-tranzactie-v1.json",
   "title": "Profil Unic de Tranzacție Auto",
   "type": "object",
   "required": ["id_tranzactie", "stare", "creat_la", "date_vanzator", "date_cumparator", "date_vehicul", "date_tranzactie"],

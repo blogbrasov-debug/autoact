@@ -192,7 +192,7 @@ Fișier: **`module-2/autoact-workflow.json`** — generat de `node module-2/buil
    - **Gemini Curatare** → Query Auth: Name `key`, Value `AIza...` (Google AI Studio);
    - **Gmail Livrare** → Gmail OAuth2 (contul de trimitere).
 3. (Recomandat) Pe nodul **Webhook UI**: Authentication → Header Auth cu `X-AutoAct-Key` (secretul din Modulul 3).
-4. Salvează + activează → Production URL: `https://autoact.ro/webhook/test-ui`.
+4. Salvează + activează → Production URL: `https://autoact.eu/webhook/test-ui`.
 
 **Ce conține fiecare nod (toate valorile pre-configurate):**
 
@@ -235,7 +235,7 @@ Fișier: **`module-2/autoact-workflow.json`** — generat de `node module-2/buil
    | `0.0.0.0/0` | TCP | 443 | UI n8n + webhook-uri (Netopia/Stripe) |
 
    ⚠️ **Nu deschide portul 5678** (n8n nativ): n8n rămâne în rețeaua internă Docker; singura poartă publică este Caddy (reverse proxy cu SSL automat).
-5. **DNS:** la registrar (ex. Cloudflare/ClouDNS): `A autoact.ro → IP public instanță`, `A www → același IP`, TTL 300. Caddy emite certificatul Let's Encrypt doar după ce DNS-ul rezolvă corect domeniul spre IP-ul instanței.
+5. **DNS:** la registrar (ex. Cloudflare/ClouDNS): `A autoact.eu → IP public instanță`, `A www → același IP`, TTL 300. Caddy emite certificatul Let's Encrypt doar după ce DNS-ul rezolvă corect domeniul spre IP-ul instanței.
 6. **(Recomandat) Backup gratuit:** Boot Volume Backups cu policy „Bronze” — inclus în Always Free.
 
 > **Capcană cunoscută:** VM-urile A1 gratuite sunt frecvent „out of capacity” în anumite momente. Dacă provisioning-ul eșuează, reîncearcă la intervale de 2–3 ore sau schimbă Availability Domain. Nu accepta shape-ul „E2.1.Micro” ca substitut pentru pipeline — e insuficient pentru OCR + n8n.
@@ -244,7 +244,7 @@ Fișier: **`module-2/autoact-workflow.json`** — generat de `node module-2/buil
 
 Fișierul complet, gata de deploy: **`module-3/docker-compose.yml`**. Puncte-cheie:
 
-- **n8n** (`n8nio/n8n:latest`, imagine multi-arch — rulează nativ pe ARM64): `N8N_HOST=autoact.ro`, `N8N_PROXY_HOPS=1`, `WEBHOOK_URL=https://autoact.ro/`, `NODE_FUNCTION_ALLOW_BUILTIN=fs,path,crypto` (necesar pentru zip-store din Modulul 2.7 și decriptarea semnăturii Netopia din Modulul 5.1bis), `EXECUTIONS_DATA_PRUNE=true`, `EXECUTIONS_DATA_MAX_AGE=48` — n8n își curăță singur execuțiile mai vechi de 48 h.
+- **n8n** (`n8nio/n8n:latest`, imagine multi-arch — rulează nativ pe ARM64): `N8N_HOST=autoact.eu`, `N8N_PROXY_HOPS=1`, `WEBHOOK_URL=https://autoact.eu/`, `NODE_FUNCTION_ALLOW_BUILTIN=fs,path,crypto` (necesar pentru zip-store din Modulul 2.7 și decriptarea semnăturii Netopia din Modulul 5.1bis), `EXECUTIONS_DATA_PRUNE=true`, `EXECUTIONS_DATA_MAX_AGE=48` — n8n își curăță singur execuțiile mai vechi de 48 h.
 - **PostgreSQL 16-alpine** cu volum dedicat `pgdata`; n8n se conectează prin `DB_TYPE=postgresdb`. Alternativa SQLite internă e OK pentru lansare, dar PG oferă backup/migrare curată.
 - **Caddy** (`caddy:2-alpine`) cu Caddyfile minimal montat din `./caddy/Caddyfile`: reverse proxy → `n8n:5678`, TLS automat Let's Encrypt, redirect 80→443.
 - Volum `local_files` → `/home/node/local` în containerul n8n (zona de lucru provizorie pentru ZIP-uri; curățată de job-ul GDPR din Modulul 4).
@@ -257,7 +257,7 @@ Un singur script face tot — de la VM proaspătă la HTTPS funcțional. Fișier
 ```bash
 # De pe calculatorul local, din directorul module-3/:
 chmod +x deploy-autoact.sh
-./deploy-autoact.sh ubuntu@IP_PUBLIC_AUTOACT autoact.ro
+./deploy-autoact.sh ubuntu@IP_PUBLIC_AUTOACT autoact.eu
 # Scriptul se conectează prin SSH, instalează totul și pornește stack-ul.
 # VM-urile A1 gratuite dau uneori "out of capacity" — reia pasul de creare a instanței, apoi rerulează scriptul.
 ```
@@ -318,7 +318,7 @@ WHERE stare = 'livrat' AND livrat_la < NOW() - INTERVAL '48 hours';
 
 > **Bug prins și reparat prin rulare reală** (scenariul 6 din `module-5/test-e2e-idempotency.js`): CTE-ul `logare` făcea `RETURNING fisiere_sterse, tranzactii_epurate`, dar interogarea finală selecta `id_rulare` din el — `ERROR: column "id_rulare" does not exist`, deci job-ul GDPR ar fi aruncat eroare la **fiecare** rulare în producție. Corectat: `RETURNING id_rulare, ...`. Testul rulează acum job-ul pe date reale și verifică efectul (PII epurată, fișiere șterse, log scris), nu doar faptul că nu aruncă.
 
-Programare în n8n: nod **Schedule Trigger** (`0 4 * * *`) → nod **Postgres** (Operation: Execute Query) cu conținutul fișierului → nod **IF** (`row_count > 0`) → nod **Gmail** către `founder@autoact.ro` cu rezumatul „GDPR purge: N tranzacții epurate” (e-mail de audit, nu alertă de intervenție).
+Programare în n8n: nod **Schedule Trigger** (`0 4 * * *`) → nod **Postgres** (Operation: Execute Query) cu conținutul fișierului → nod **IF** (`row_count > 0`) → nod **Gmail** către `founder@autoact.eu` cu rezumatul „GDPR purge: N tranzacții epurate” (e-mail de audit, nu alertă de intervenție).
 
 ### 4.3 Varianta nod „Code” n8n (Node.js, șterge și fișierele de pe disc)
 
@@ -331,7 +331,7 @@ Fișier complet: **`module-4/gdpr-purge.code-node.js`** — parcurge execuțiile
 ### 5.1 Fluxul de plată + facturare (zero-intervenție)
 
 ```
-[UI: client plătește 49 RON] → [Netopia: redirect 3DS] → [Netopia → webhook POST https://autoact.ro/webhook/netopia]
+[UI: client plătește 49 RON] → [Netopia: redirect 3DS] → [Netopia → webhook POST https://autoact.eu/webhook/netopia]
    → [n8n Webhook] → [Code: validare semnătură + idempotency] → [IF: payment_status == 'confirmed' && sumă == 49]
         ├─ da → [Code: payload SmartBill] → [HTTP: POST /v2/documents] → [Gmail: ZIP + factură + instrucțiuni]
         └─ nu → [Respond 200 silentios + log]  (fără alerte admin — fallback-ul rămâne la client)
@@ -339,7 +339,7 @@ Fișier complet: **`module-4/gdpr-purge.code-node.js`** — parcurge execuțiile
 
 **Netopia (webhook):**
 
-- URL de confirmare configurat în contul Netopia (MobilPay): `https://autoact.ro/webhook/netopia`, method POST, body URL-encoded.
+- URL de confirmare configurat în contul Netopia (MobilPay): `https://autoact.eu/webhook/netopia`, method POST, body URL-encoded.
 - Din motive de Free-Tier, semnătura se verifică cu cheia publică Netopia încărcată în n8n Credentials (tip „Public Key”) — nu se folosesc servicii externe de validare.
 - **Idempotență:** n8n ține evidența `order_id`-urilor procesate în PostgreSQL — dublul webhook (retransmisii Netopia) NU generează facturi duplicate.
 
@@ -429,11 +429,11 @@ Nod HTTP Request → `POST https://ws.smartbill.ro:8183/SBORO/api/document/new` 
   <li>Primești noua înmatriculare — gata!</li>
 </ol>
 
-<p><strong>Important:</strong> actele au valoare doar printate pe hârtie + semnate conform pașilor de mai sus. Verifică cu atenție toate datele înainte de printare (nume, CNP, VIN, plăcuțe) — AutoAct nu poate fi tras la răspundere pentru date introduse greșit de client (termenii completi la autoact.ro/termeni).</p>
+<p><strong>Important:</strong> actele au valoare doar printate pe hârtie + semnate conform pașilor de mai sus. Verifică cu atenție toate datele înainte de printare (nume, CNP, VIN, plăcuțe) — AutoAct nu poate fi tras la răspundere pentru date introduse greșit de client (termenii completi la autoact.eu/termeni).</p>
 
 <p>Cu stimă,<br>
 <strong>Echipa AutoAct</strong><br>
-autoact.ro · support@autoact.ro</p>
+autoact.eu · support@autoact.eu</p>
 
 <!-- Atașamente configurate în nodul Gmail: ZIP-ul generat în Modulul 2.7 + factura SmartBill -->
 ```

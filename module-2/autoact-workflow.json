@@ -204,7 +204,7 @@
       ],
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ status: \"awaiting_payment\", suma_ron: 49, moneda: \"RON\", id_tranzactie: $json.id_tranzactie, url_plata: \"https://autoact.ro/plata?tr=\" + $json.id_tranzactie, mesaj: \"Finalizeaza plata pentru a genera documentele.\" }) }}",
+        "responseBody": "={{ JSON.stringify({ status: \"awaiting_payment\", suma_ron: 49, moneda: \"RON\", id_tranzactie: $json.id_tranzactie, url_plata: \"https://autoact.eu/plata?tr=\" + $json.id_tranzactie, mesaj: \"Finalizeaza plata pentru a genera documentele.\" }) }}",
         "options": {
           "responseCode": 200
         }
@@ -237,7 +237,7 @@
         "sendTo": "={{ $json.destinatar }}",
         "subject": "AutoAct — actele tale pentru transcriere auto sunt gata (ZIP + factură)",
         "emailType": "html",
-        "message": "=<p>Bună, {{ $json.nume_client }},</p><p>Pachetul tău de acte pentru transcrierea auto este gata și îl găsești atașat (ZIP + factură).</p><h3>Ce faci după ce printezi actele</h3><ol><li>Printează PDF-urile din arhivă.</li><li>Mergi ÎNTÂI la notar cu mașina și actele originale pentru autentificarea contractului.</li><li>Semnați amândoi în fața notarului.</li><li>Mergi la DRPCIV cu contractul autentificat, CI, CIV original și dovada plății taxei de transcriere.</li><li>Primești noua înmatriculare.</li></ol><p>Verifică toate datele înainte de printare — actele se emit exact cu datele confirmate de tine la pasul de verificare.</p><p>Cu stimă,<br><strong>Echipa AutoAct</strong><br>autoact.ro</p>",
+        "message": "=<p>Bună, {{ $json.nume_client }},</p><p>Pachetul tău de acte pentru transcrierea auto este gata și îl găsești atașat (ZIP + factură).</p><h3>Ce faci după ce printezi actele</h3><ol><li>Printează PDF-urile din arhivă.</li><li>Mergi ÎNTÂI la notar cu mașina și actele originale pentru autentificarea contractului.</li><li>Semnați amândoi în fața notarului.</li><li>Mergi la DRPCIV cu contractul autentificat, CI, CIV original și dovada plății taxei de transcriere.</li><li>Primești noua înmatriculare.</li></ol><p>Verifică toate datele înainte de printare — actele se emit exact cu datele confirmate de tine la pasul de verificare.</p><p>Cu stimă,<br><strong>Echipa AutoAct</strong><br>autoact.eu</p>",
         "options": {
           "appendAttribution": false
         }

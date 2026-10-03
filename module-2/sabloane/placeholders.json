@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://autoact.ro/schemas/placeholders-v1.json",
+  "$id": "https://autoact.eu/schemas/placeholders-v1.json",
   "title": "Harta canonică placeholder-e AutoAct",
   "description": "Fiecare cheie este un {{placeholder}} din șabloane; fiecare valoare este calea în Profilul Unic de Tranzacție Auto (module-1/profil-tranzactie.schema.json). Sursa de adevăr pentru nodul 'Documente ZIP' din module-2/autoact-workflow.json.",
   "version": 1,

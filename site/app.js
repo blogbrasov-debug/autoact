@@ -84,7 +84,7 @@
   });
 
   async function trimiteSpreValidare() {
-    if (!cfg.WEBHOOK_URL || cfg.WEBHOOK_URL.includes('autoact.ro')) {
+    if (!cfg.WEBHOOK_URL) {
       randeazaPreview(window.AUTOACT_DEMO, true);
       return;
     }

@@ -186,7 +186,7 @@ check(evalueazaIF('IF Scor & CNP', stare) === true, 'E2E nod 6: IF Scor & CNP �
 check(evalueazaIF('IF Plata', stare) === false, 'E2E nod 8: IF Plata → ramura FALSE înainte de plată');
 const raspunsPlata = JSON.parse(evalueazaExpresie(nod('Respond Plata').parameters.responseBody, stare));
 check(raspunsPlata.status === 'awaiting_payment' && raspunsPlata.suma_ron === 49, 'E2E nod 9: clientul primește awaiting_payment + 49 RON');
-check(raspunsPlata.url_plata === 'https://autoact.ro/plata?tr=' + item.id_tranzactie, 'E2E nod 9: url_plata conține id_tranzactie');
+check(raspunsPlata.url_plata === 'https://autoact.eu/plata?tr=' + item.id_tranzactie, 'E2E nod 9: url_plata conține id_tranzactie');
 
 // Reintrare cu plata confirmată → IF true → Documente ZIP (cod REAL)
 const dupaPlata = { ...stare, plata_confirmata: true };

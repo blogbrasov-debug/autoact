@@ -400,7 +400,7 @@
         "sendTo": "={{ $json.destinatar }}",
         "subject": "AutoAct — actele tale pentru transcriere auto sunt gata (ZIP + factură)",
         "emailType": "html",
-        "message": "=<p>Bună, {{ $json.nume_client }},</p><p>Pachetul tău de acte este gata și îl găsești atașat, împreună cu factura.</p><h3>Ce faci după ce printezi actele</h3><ol><li>Printează PDF-urile din arhivă.</li><li>Mergi ÎNTÂI la notar cu mașina și actele originale pentru autentificarea contractului.</li><li>Semnați amândoi în fața notarului.</li><li>Mergi la DRPCIV cu contractul autentificat, CI, CIV original și dovada plății taxei de transcriere.</li><li>Primești noua înmatriculare.</li></ol><p>Verifică toate datele înainte de printare — actele se emit exact cu datele confirmate de tine la pasul de verificare.</p><p>Cu stimă,<br><strong>Echipa AutoAct</strong><br>autoact.ro</p>",
+        "message": "=<p>Bună, {{ $json.nume_client }},</p><p>Pachetul tău de acte este gata și îl găsești atașat, împreună cu factura.</p><h3>Ce faci după ce printezi actele</h3><ol><li>Printează PDF-urile din arhivă.</li><li>Mergi ÎNTÂI la notar cu mașina și actele originale pentru autentificarea contractului.</li><li>Semnați amândoi în fața notarului.</li><li>Mergi la DRPCIV cu contractul autentificat, CI, CIV original și dovada plății taxei de transcriere.</li><li>Primești noua înmatriculare.</li></ol><p>Verifică toate datele înainte de printare — actele se emit exact cu datele confirmate de tine la pasul de verificare.</p><p>Cu stimă,<br><strong>Echipa AutoAct</strong><br>autoact.eu</p>",
         "options": {
           "appendAttribution": false
         }
@@ -419,7 +419,7 @@
         "width": 560,
         "height": 300,
         "color": 4,
-        "content": "## INSTALARE — AutoAct Plăți + Documente (Netopia → SmartBill → Docs → ZIP)\\n1) n8n → ⋯ → **Import from File** → acest JSON.\\n2) **Schema DB:** rulează o dată module-5/plati-schema.sql (docker compose exec -T postgres psql -U autoact -d autoact).\\n3) **Env (docker-compose.yml):** NETOPIA_RSA_PRIVATE_KEY, NETOPIA_MPAY_SECRET, SMARTBILL_VAT_CODE, SMARTBILL_SERIE, GOOGLE_DOCS_TEMPLATE_CONTRACT, GOOGLE_DOCS_TEMPLATE_DRPCIV, GOOGLE_DOCS_TEMPLATE_DECLARATII.\\n4) **Credentials n8n:** SmartBill Basic Auth + Google OAuth2 (Drive + Docs scope-uri) — nodurile 15–18.\\n5) **Netopia:** URL de confirmare https://autoact.ro/webhook/netopia.\\n6) Activează workflow-ul."
+        "content": "## INSTALARE — AutoAct Plăți + Documente (Netopia → SmartBill → Docs → ZIP)\\n1) n8n → ⋯ → **Import from File** → acest JSON.\\n2) **Schema DB:** rulează o dată module-5/plati-schema.sql (docker compose exec -T postgres psql -U autoact -d autoact).\\n3) **Env (docker-compose.yml):** NETOPIA_RSA_PRIVATE_KEY, NETOPIA_MPAY_SECRET, SMARTBILL_VAT_CODE, SMARTBILL_SERIE, GOOGLE_DOCS_TEMPLATE_CONTRACT, GOOGLE_DOCS_TEMPLATE_DRPCIV, GOOGLE_DOCS_TEMPLATE_DECLARATII.\\n4) **Credentials n8n:** SmartBill Basic Auth + Google OAuth2 (Drive + Docs scope-uri) — nodurile 15–18.\\n5) **Netopia:** URL de confirmare https://autoact.eu/webhook/netopia.\\n6) Activează workflow-ul."
       }
     },
     {

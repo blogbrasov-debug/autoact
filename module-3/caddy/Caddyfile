@@ -13,7 +13,7 @@
 # ============================================================
 
 {
-	email {$ACME_EMAIL:support@autoact.ro}
+	email {$ACME_EMAIL:support@autoact.eu}
 	local_certs {$USE_LOCAL_CERTS:false}
 }
 
