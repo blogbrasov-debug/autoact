@@ -221,6 +221,25 @@ PLATARI: { PROCESATOR: 'paddle', PRAG_COMENZI_REGULARIZARE: 200 }
 `site/test-banca-cifre.js` verifică la fiecare rulare că procesatorul și pragul din config.js
 sunt aceleași cu cele exportate și descrise în acest document — decizia nu se învețeze în tăcere.
 
+### Ce trebuie respectat la migrarea workflow-ului (verificat 3 oct. 2026)
+
+Două fapte oficiale schimbă designul față de Netopia; au fost verificate **înainte** de a scrie cod:
+
+| Fapt verificat | Consecință în cod |
+|---|---|
+| Paddle plătește vânzătorul **doar în USD, EUR, GBP, AUD, CAD** | suma și moneda se citesc din eveniment, **nu** se compară cu 49 RON |
+| Webhook-ul vine cu antetul **`Paddle-Signature`** = HMAC peste **octeții exacti** ai body-ului | verificarea se face pe body-ul brut, nu pe obiectul parsat |
+
+⚠️ **Prețul afișat clienților (49 RON) nu mai e plătibil în RON prin Paddle.** Paddle face
+conversia la moneda de plată a clientului și el rămâne cu expunerea FX. La 49 RON, orice
+diferență de curs împarte marja între tine și Paddle — la un volum mic, câștigul e neglijabil
+dar nici pierderea nu e. **Decizie de produs, nu de cod:** afișezi „49 RON" și încasezi în
+EUR/USD, sau cobori prețul de afișare. Nu am ales eu în locul tău.
+
+**Atenție la o capcană cunoscută:** există un advisory public (GHSA-mjgf-xj26-9qf9, mai 2026)
+despre comparație HMAC **neconstantă în timp** la webhook-urile Paddle Billing — o implementare
+naivă în n8n poate lăsa o urmă de oracle. De aceea comparația trebuie scrisă cu `timingSafeEqual`.
+
 ⚠️ **Cifra 200 este o decizie de afacere, nu una de lege.** Pragul legal depinde de regimul
 aplicabil și trebuie confirmat cu un contabil înainte de a te baza pe el; o oră de consultanță
 costă 100–200 lei și elimină cea mai mare incertitudine din tot proiectul.
