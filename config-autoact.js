@@ -44,31 +44,19 @@ const textUnic = (eticheta, regex) => {
   return v;
 };
 
-/* ---------- Prețul: valoare contractuală (lei) + sumă încasată (EUR) ---------- */
+/* ---------- Prețul: o singură față, în lei, TVA inclus ---------- */
+/* Decizia (3 oct. 2026, măsurată pe Stripe sandbox): clientul plătește
+ * 49 RON, TVA inclus, prin Stripe în rol de Merchant of Record. Nu mai
+ * există a doua față în euro și deci nici curs de control — comparația
+ * 9,16 € vs 49 lei costa 1,07 lei/tranzacție (net 36,89 față de 37,96),
+ * plus o dependență de curs care nu poate fi auditată. Prețul se
+ * încasează în aceeași monedă în care e contractat: zero conversie. */
 const PRET_RON = Number(unica('PRET_RON', /PRET_RON\s*:\s*\d+/).match(/\d+/)[0]);
 if (!Number.isInteger(PRET_RON) || PRET_RON <= 0) {
   throw new Error('site/config.js: PRET_RON trebuie să fie un întreg pozitiv.');
 }
-const PRET_EUR = Number(unica('PRET_EUR', /PRET_EUR\s*:\s*[\d.]+/).match(/[\d.]+/)[0]);
-if (!(PRET_EUR > 0)) {
-  throw new Error('site/config.js: PRET_EUR trebuie să fie un număr pozitiv.');
-}
-/* Cursul de control: 1 EUR = 5,3488 RON (ECB, 2 oct. 2026). Nu e o cotă live —
- * e banda în care cele două fețe ale prețului sunt compatibile. Fără ea, o eroare
- * de tipar (49 → 490, sau 9,16 → 91,6) ar trece neobservată și clientul ar
- * plăti un preț diferit de cel contractat. */
-const CURS_EUR_RON = 5.3488;
-const CURS_TOLERANTA = 0.10;
-const cursImplicit = PRET_RON / PRET_EUR;
-if (Math.abs(cursImplicit - CURS_EUR_RON) / CURS_EUR_RON > CURS_TOLERANTA) {
-  throw new Error(
-    'site/config.js: PRET_RON (' + PRET_RON + ') și PRET_EUR (' + PRET_EUR + ') nu mai corespund. ' +
-    'Raportul implică ' + cursImplicit.toFixed(4) + ' RON/EUR, iar cursul de control e ' +
-    CURS_EUR_RON + ' (±' + Math.round(CURS_TOLERANTA * 100) + '%). Recalculează una dintre fețe.'
-  );
-}
-/* Textul afișat pe site: „9,16 €” — virgulă zecimală, simbol de euro. */
-const PRET_EUR_AFISAT = PRET_EUR.toFixed(2).replace('.', ',') + ' €';
+/* Textul afișat pe site: „49 lei”. */
+const PRET_AFISAT = PRET_RON + ' lei';
 
 /* ---------- NAP (nume, adresă, contact) — sursa unică ---------- */
 const NAP = {
@@ -126,14 +114,45 @@ const RETENTION_H = 48;
 const EXCEPTII_CIFRE = {
   9500: 'placeholder de exemplu în câmpul „Prețul de vânzare” (nu e prețul AutoAct)',
   24: 'prag legal — scutire taxă transcriere pentru mașini sub 24 de luni',
-  16: 'partea zecimală a sumei încasate („9,16 €” = 49 lei ÷ 5,3488 RON/EUR), din config.js',
   [RETENTION_H]: 'retenția GDPR promisă pe pagina de contact (verificată contra module-4/gdpr-purge.sql)'
 };
 
+/* ---------- Stripe: identificatorii reali, citiți din config.js ---------- */
+/* ID-urile sunt publice prin natura lor (Payment Link-ul apare în
+ * payload-ul răspunsului către client), dar nu trebuie scrise în
+ * workflow-uri sau șabloane cu gura: le generăm de aici, ca o
+ * schimbare de cont Stripe să fie o editare într-un singur loc. */
+const STRIPE = {
+  PRODUS_ID: textUnic('STRIPE.PRODUS_ID', /PRODUS_ID\s*:\s*'[^']*'/g),
+  PRET_ID: textUnic('STRIPE.PRET_ID', /PRET_ID\s*:\s*'[^']*'/g),
+  PAYMENT_LINK: textUnic('STRIPE.PAYMENT_LINK', /PAYMENT_LINK\s*:\s*'[^']*'/g),
+  COD_FISCAL: textUnic('STRIPE.COD_FISCAL', /COD_FISCAL\s*:\s*'[^']*'/g),
+  WEBHOOK_URL: textUnic('STRIPE.WEBHOOK_URL', /WEBHOOK_URL_STRIPE\s*:\s*'[^']*'/g)
+};
+/* Payment Link-ul trebuie să fie o adresă https reală — altfel
+ * butonul de plată ar trimite clientul în gol. */
+if (!/^https:\/\/buy\.stripe\.com\/[A-Za-z0-9_]+$/.test(STRIPE.PAYMENT_LINK)) {
+  throw new Error(
+    'site/config.js: STRIPE.PAYMENT_LINK nu arată ca un Payment Link Stripe — este „' + STRIPE.PAYMENT_LINK + '”.'
+  );
+}
+/* Codul fiscal (tax code) e cel care face produsul „Eligible for
+ * Managed Payments”; un id greșit înseamnă că Stripe nu colectează
+ * TVA și nu poate scoate factură în numele nostru. */
+if (!/^txcd_[0-9A-Za-z]+$/.test(STRIPE.COD_FISCAL)) {
+  throw new Error('site/config.js: STRIPE.COD_FISCAL trebuie să fie un id txcd_… — este „' + STRIPE.COD_FISCAL + '”.');
+}
+/* Stripe e Merchant of Record: el emite documentul fiscal și îl
+ * trimite clientului. Fără URL de webhook nu știm când s-a plătit. */
+if (!/^https:\/\/[a-z0-9.-]+\/webhook\/stripe$/.test(STRIPE.WEBHOOK_URL)) {
+  throw new Error('site/config.js: STRIPE.WEBHOOK_URL trebuie să fie URL-ul public al webhook-ului Stripe (…/webhook/stripe) — este „' + STRIPE.WEBHOOK_URL + '”.');
+}
+
 /* ---------- Decizia fiscală: procesator + prag de regularizare ----------
  * Citite din site/config.js ca să nu existe o cifră scrisă în două locuri.
- * PROCESATOR = 'paddle' → procesatorul este vânzătorul de drept (MoR) și
- * emite documentul către client; nu e nevoie de CUI ca să încasăm.
+ * PROCESATOR = 'stripe' → Stripe e Merchant of Record („Managed
+ * Payments”): el e vânzătorul de drept, emite factura și reține TVA,
+ * deci NU e nevoie de CUI ca să încasăm.
  * PRAG_COMENZI_REGULARIZARE = de la când se oprește vânzarea și se face CUI/PFA. */
 const PROCESATOR_PLATI = unica('PLATARI.PROCESATOR', /PROCESATOR\s*:\s*'[^']*'/).match(/'([^']*)'/)[1];
 if (!PROCESATOR_PLATI.trim()) throw new Error('site/config.js: PLATARI.PROCESATOR e gol.');
@@ -145,6 +164,6 @@ if (!Number.isInteger(PRAG_REGULARIZARE) || PRAG_REGULARIZARE <= 0) {
 }
 
 module.exports = {
-  PRET_RON, NAP, PLACEHOLDER_NAP, RETENTION_H, EXCEPTII_CIFRE, CONFIG, CHEIE_CIF, cifraControlCif,
-  PROCESATOR_PLATI, PRAG_REGULARIZARE, PRET_EUR, PRET_EUR_AFISAT, CURS_EUR_RON
+  PRET_RON, PRET_AFISAT, NAP, PLACEHOLDER_NAP, RETENTION_H, EXCEPTII_CIFRE, CONFIG, CHEIE_CIF,
+  cifraControlCif, PROCESATOR_PLATI, PRAG_REGULARIZARE, STRIPE
 };

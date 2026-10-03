@@ -1,34 +1,35 @@
 /* ============================================================
  * AutoAct | Modulul 5 | build-workflow-plati.js
  * Generează module-5/autoact-workflow-plati.json — workflow-ul n8n
- * pentru plată + facturare + generare documente (BLUEPRINT.md §5.1),
+ * pentru plată + generare documente (BLUEPRINT.md §5.1),
  * importabil prin n8n → ⋯ → Import from File.
+ ** 17 noduri pipeline:
+ *   1  Webhook Stripe           (POST /webhook/stripe, responseNode, raw body)
+ *   2  Verificare Semnătură     (Code: HMAC-SHA256 pe octeții EXACTI ai body-ului)
+ *   3  IF Semnătură Validă      (true/false)
+ *   4  Respond Semnătură        (ramura false → cod 400, fără alerte)
+ *   5  Idempotență (Postgres)   (CTE INSERT + UNION fallback — mereu exact 1 rând)
+ *   6  IF Deja Procesată        (duplicat === 1 → true)
+ *   7  Respond După             (ramura true → cod 200 „deja procesat")
+ *   8  Data Tranzacție (PG)     (SELECT profil_json + coloane aplatizate)
+ *   9  IF Plată Confirmată      (eveniment plătit && suma === PREȚ)
+ *   10  Respond Respins          (ramura false → cod 200 + status neplătit)
+ *   11  Placeholder-e Docs       (Code: 37 înlocuiri × 3 documente din profil_json)
+ *   12  Copie Template (Drive)   (POST files/{id}/copy — template-ul NU se modifică)
+ *   13  Docs batchUpdate         (POST .../documents/{id}:batchUpdate, replaceAllText ×37)
+ *   14  Export PDF (Drive)       (GET files/{id}/export?mimeType=application/pdf)
+ *   15  Șterge Copia (Drive)     (DELETE files/{id} — fără gunoi în Drive)
+ *   16  ZIP Pachet               (Code: zip-store inline → 1 arhivă din 3 PDF-uri)
+ *   17  Gmail Livrare ZIP        (ZIP atașat + instrucțiuni; factura vine de la Stripe)
  *
- * 20 noduri pipeline:
- *   1  Webhook Netopia          (POST /webhook/netopia, responseNode)
- *   2  Parsare POST Netopia     (form-urlencoded → JSON)
- *   3  Decriptare Semnătură     (Code: RSA verify + AES-CBC, folosește crypto nativ)
- *   4  IF Semnătură Validă      (true/false)
- *   5  Respond Semnătură        (ramura false → cod 496, fără alerte)
- *   6  Idempotență (Postgres)   (CTE INSERT + UNION fallback — mereu exact 1 rând)
- *   7  IF Deja Procesată        (duplicat === 1 → true)
- *   8  Respond După             (ramura true → cod 200 „deja procesat")
- *   9  Data Tranzacție (PG)     (SELECT profil_json + coloane aplatizate)
- *  10  IF Plată Confirmată      (status === 'confirmed' && suma === PREȚ)
- *  11  Respond Respins          (ramura false → cod 200 + status respins)
- *  12  Payload SmartBill        (Code: construiește factura din rândul tranzacției)
- *  13  SmartBill Factură        (HTTP POST Basic Auth → e-Factura automată)
- *  14  Placeholder-e Docs       (Code: 37 înlocuiri × 3 documente din profil_json)
- *  15  Copie Template (Drive)   (POST files/{id}/copy — template-ul NU se modifică)
- *  16  Docs batchUpdate         (POST .../documents/{id}:batchUpdate, replaceAllText ×37)
- *  17  Export PDF (Drive)       (GET files/{id}/export?mimeType=application/pdf)
- *  18  Șterge Copia (Drive)     (DELETE files/{id} — fără gunoi în Drive)
- *  19  ZIP Pachet               (Code: zip-store inline → 1 arhivă din 3 PDF-uri)
- *  20  Gmail Livrare ZIP        (ZIP atașat + factură + instrucțiuni)
+ * ⚠ FACTURARE: nu mai există nod de facturare. Stripe rulează în „Managed
+ * Payments" (Merchant of Record): el emite factura și chitanța cu TVA și
+ * le trimite clientului. Un nod de facturare aici ar produce un al doilea
+ * document fiscal pentru aceeași plată.
  *
  * + 4 sticky notes. ~30 auto-validări la fiecare generare (printre care
- * simularea reală a criptografiei cu vectori RSA 2048 + AES-256-CBC generați
- * local, evaluarea de sintaxă a TUTUROR expresiilor și simularea nodurilor
+ * simularea reală a criptografiei cu antet Stripe-Signature generat local,
+ * evaluarea de sintaxă a TUTUROR expresiilor și simularea nodurilor
  * de generare documente pe profilul din Test Data Kit).
  *
  * Rulare:  node module-5/build-workflow-plati.js
@@ -40,17 +41,95 @@
  * scrisă manual aici. Dacă schimbi prețul, schimbi config.js doar. */
 const { PRET_RON } = require('../config-autoact.js');
 
-/* ---------- Nodul 2: parsarea body-ului form-urlencoded Netopia ---------- */
-const PARSARE_BODY = `
-// Netopia transmite POST form-urlencoded cu un singur câmp „data" (Base64-encoded XML/JSON).
-// Un răspuns 200 cu „ok" (lipsă eroare) confirmă primirea; orice altceva = retransmisie.
-const out = { ok: true };
-if ($json && $json.body && $json.body.data) {
-  out.data_encoded = $json.body.data;
+/* Stripe trimite suma în unități mici (ceni). Un factor scris în șirul
+ * de mai jos ar fi încă o valoare de întreținut lângă preț — îl notăm
+ * aici, în cod, și îl interpolăm. */
+const FACTOR_CENTI = 100;
+
+/* ---------- Nodul 2: verificarea semnăturii Stripe ----------
+ * Antetul `Stripe-Signature` are forma `t=<unix>,v1=<hex>`; semnătura
+ * e HMAC-SHA256(secret, „<t>.<body>") peste OCTEȚII EXACTI ai body-ului.
+ * De aceea semnătura nu poate fi verificată pe obiectul parsat — un JSON
+ * re-serializat are altă ordine a cheilor și altă spațiere, deci hash-ul
+ * nu mai coincide. Comparația e constantă în timp (timingSafeEqual) și
+ * antetele mai vechi de 300 s sunt refuzate: altfel un body capturat
+ * ar putea fi reluat oricând drept plată nouă.
+ */
+const VERIFICARE_SEMNATURA = `
+const crypto = require('crypto');
+
+const TOLERANTA_S = 300;
+const t0 = Date.now();
+
+/* Body-ul trebuie să ajungă CRUD (opțiunea „Raw Body" a nodului Webhook).
+ * Dacă n8n l-a parsat, semnătura nu mai poate fi verificată corect — și nu
+ * e corect nici să încercăm o potrivire „aproape": respingem evenimentul. */
+let raw = null;
+if (Buffer.isBuffer($json.body)) raw = $json.body;
+else if (typeof $json.body === 'string') raw = Buffer.from($json.body, 'utf8');
+if (!raw) return [{ json: { semnatura_ok: false, motiv: 'body_raw_lipsa' } }];
+
+const antet = ($json.headers && ($json.headers['stripe-signature'] || $json.headers['Stripe-Signature'])) || '';
+const campuri = {};
+for (const parte of String(antet).split(',')) {
+  const i = parte.indexOf('=');
+  if (i > 0) campuri[parte.slice(0, i).trim()] = parte.slice(i + 1).trim();
 }
-return [{ json: out }];
-`;
-/* ---------- Nodul 14: Placeholder-e Docs — 37 înlocuiri × 3 documente ---------- */
+const t = Number(campuri.t);
+const v1 = campuri.v1 || '';
+if (!Number.isFinite(t) || !v1) return [{ json: { semnatura_ok: false, motiv: 'antet_invalid' } }];
+
+/* Antet prea vechi = body capturat și reluat ulterior. */
+if (Math.abs(Date.now() / 1000 - t) > TOLERANTA_S) {
+  return [{ json: { semnatura_ok: false, motiv: 'semnatura_expirata' } }];
+}
+
+const secret = $env.STRIPE_WEBHOOK_SECRET;
+if (!secret) return [{ json: { semnatura_ok: false, motiv: 'secret_lipsa' } }];
+
+const asteptat = crypto
+  .createHmac('sha256', secret)
+  .update(t + '.' + raw.toString('utf8'), 'utf8')
+  .digest('hex');
+const a = Buffer.from(asteptat, 'utf8');
+const b = Buffer.from(v1, 'utf8');
+if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+  return [{ json: { semnatura_ok: false, motiv: 'semnatura_invalida' } }];
+}
+
+/* Abia acum evenimentul e autentic și îl parsăm. */
+let ev;
+try { ev = JSON.parse(raw.toString('utf8')); }
+catch (e) { return [{ json: { semnatura_ok: false, motiv: 'json_invalid' } }]; }
+
+const obiect = (ev.data && ev.data.object) || {};
+
+/* Suma vine în unități mici și în notația minorității („ron" = lei).
+ * O normalizăm o singură dată, aici, ca restul fluxului să lucreze în lei. */
+const centi = Number(obiect.amount_total || obiect.amount_received || 0);
+const platita = ev.type === 'checkout.session.completed' && obiect.payment_status === 'paid';
+
+/* client_reference_id e id_tranzactie pus de Payment Link (nodul „Respond
+ * Plata" din pipeline) — e singurul legătură dintre plată și dosar. */
+const order_id = obiect.client_reference_id || (obiect.metadata && obiect.metadata.id_tranzactie) || null;
+if (!order_id) {
+  return [{ json: { semnatura_ok: true, fara_tranzactie: true, motiv: 'fara_client_reference_id' } }];
+}
+
+return [{ json: {
+  semnatura_ok: true,
+  durata_ms: Date.now() - t0,
+  event_id: String(ev.id || ''),
+  event_type: String(ev.type || ''),
+  order_id: String(order_id),
+  suma: centi / ${FACTOR_CENTI},
+  moneda: String(obiect.currency || '').toUpperCase(),
+  status: platita ? 'confirmed' : String(ev.type || 'necunoscut').split('.').join('_'),
+  email: (obiect.customer_details && obiect.customer_details.email) || obiect.customer_email || null
+} }];
+`.trim() + '\n';
+
+/* ---------- Nodul 12: Placeholder-e Docs — 37 înlocuiri × 3 documente ---------- */
 /* Harta (37 intrări) = module-2/sabloane/placeholders.json, verificată de
  * module-2/verifica-sabloane.js contra nodului „Documente ZIP" din pipeline.
  * Documentele: cele 3 șabloane .md redactate în module-2/sabloane/.        */
@@ -100,7 +179,7 @@ const DOCUMENTE_DOCS = [
   { cheie: '03_declaratii_fiscale', doc_nume: '03-declaratii-fiscale', env: 'GOOGLE_DOCS_TEMPLATE_DECLARATII' }
 ];
 
-/* Codul nodului 14 (Placeholder-e Docs): produce un item per document.
+/* Codul nodului 12 (Placeholder-e Docs): produce un item per document.
  * tranzactia = profil_json din DB (schema: module-1/profil-tranzactie.schema.json)
  *            sau fallback pe coloanele aplatizate (folositor în testele integrării). */
 const PLACEHOLDERE_DOCS = `
@@ -144,7 +223,7 @@ for (const doc of DOCUMENTE_DOCS) {
 }
 return iesiri;
 `.trim() + '\n';
-/* ---------- Nodul 19: ZIP Pachet — zip-store inline (CRC32 + STORE) ---------- */
+/* ---------- Nodul 17: ZIP Pachet — zip-store inline (CRC32 + STORE) ---------- */
 const ZIP_PACHET = `
 // Colectează PDF-urile binare produse de nodul Export (3 itemi, unul per document),
 // construiește arhiva cu zip-store inline (CRC32 + metoda STORE, fără npm) și
@@ -156,18 +235,28 @@ const CRC_TABLE = (() => {
 })();
 function crc32(buf) { let c = -1; for (let i = 0; i < buf.length; i++) c = (c >>> 8) ^ CRC_TABLE[(c ^ buf[i]) & 0xFF]; return (c ^ -1) >>> 0; }
 
+const DOCUMENTE_DOCS = ${JSON.stringify(DOCUMENTE_DOCS)};
+
+/* Numele PDF-urilor vin din lista canonică de documente, NU din items[].json.
+ * Motivul: nodurile HTTP dintre „Placeholder-e Docs" și acest nod (Drive copy,
+ * batchUpdate, export, delete) înlocuiesc $json cu răspunsul lor — deci orice
+ * metadată pusă acolo s-a pierdut. Poziția în items rămâne cea din
+ * DOCUMENTE_DOCS, pentru că fiecare nod procesează itemii în ordine. */
 const fisiere = [];
 const numeTraf = new Set();
-for (const item of items) {
-  const nume = (item.json && item.json.nume_pdf) || ('document-' + fisiere.length + '.pdf');
-  if (numeTraf.has(nume)) throw new Error('nume PDF duplicat: ' + nume);
+for (let i = 0; i < items.length; i++) {
+  const item = items[i];
+  const doc = DOCUMENTE_DOCS[i];
+  if (!doc) throw new Error('Mai mulți itemi decât documente: ' + items.length + ' > ' + DOCUMENTE_DOCS.length);
+  const nume = doc.doc_nume + '.pdf';
   numeTraf.add(nume);
   if (!item.binary || !item.binary.data) throw new Error('PDF lipsă pentru ' + nume);
   const buf = await this.helpers.getBinaryDataBuffer(item.pairedItem !== undefined ? item.pairedItem : 0, 'data');
   fisiere.push({ nume, buffer: buf });
 }
-if (fisiere.length !== 3) throw new Error('Se așteptau 3 PDF-uri, am primit: ' + fisiere.length);
-
+if (fisiere.length !== DOCUMENTE_DOCS.length) {
+  throw new Error('Se așteptau ' + DOCUMENTE_DOCS.length + ' PDF-uri, am primit: ' + fisiere.length);
+}
 const acum = new Date();
 const timp = (acum.getHours() << 11) | (acum.getMinutes() << 5) | (acum.getSeconds() >> 1);
 const data = (((acum.getFullYear() - 1980) & 0x7F) << 9) | ((acum.getMonth() + 1) << 5) | acum.getDate();
@@ -195,190 +284,114 @@ eocd.writeUInt32LE(0x06054b50, 0); eocd.writeUInt16LE(fisiere.length, 8); eocd.w
 eocd.writeUInt32LE(director.length, 12); eocd.writeUInt32LE(offset, 16);
 const arhiva = Buffer.concat([...bucati, director, eocd]);
 
-// primul item păstrează metadatele pentru Gmail (id_tranzactie, destinatar, etc.)
-const meta = items[0].json;
-const binar = await this.helpers.prepareBinaryData(arhiva, meta.zip_nume || (meta.id_tranzactie || 'autoact') + '.zip', 'application/zip');
-return [{ json: meta, binary: { data: binar } }];
-`.trim() + '\n';
-
-/* ---------- Nodul 12: payload-ul facturii SmartBill ---------- */
-const PAYLOAD_SMARTBILL = `
-// Construiește factura pentru SmartBill (BLUEPRINT.md §5.1).
-// Datele clientului vin aplatizate din nodul „Data Tranzacție (Postgres)" (rândul tranzacției).
-const t = $json;
-const dateCumparator = {
-  nume: t.nume_cumparator || 'Client AutoAct',
-  cnp: t.cnp_cumparator || '',
-  adresa: t.adresa_cumparator || '',
-  oras: t.localitate_cumparator || t.localitate || '',
-  judet: t.judet_cumparator || '',
-  email: t.email_cumparator || ''
+/* Metadatele de livrare (destinatar, nume_client) le pune nodul „Date Livrare" —
+ * și ele pierdute de nodurile HTTP intermediare. Le luăm direct din ieșirea
+ * acelui nod prin $('Date Livrare'), care funcționează indiferent ce au făcut
+ * nodurile de pe drum. Fără destinatar nu livrăm: un ZIP fără destinatar ar
+ * arde creditele Google Docs și nu ar ajunge la nimeni. */
+const livrare = $('Date Livrare').first().json;
+if (!livrare || !livrare.destinatar) {
+  throw new Error('Date Livrare nu a produs un destinatar — pachetul nu poate fi livrat.');
+}
+const meta = {
+  ...livrare,
+  zip_nume: livrare.zip_nume || ((livrare.id_tranzactie || 'autoact') + '.zip')
 };
-const payload = {
-  companyVatCode: $env.SMARTBILL_VAT_CODE,
-  client: {
-    name: dateCumparator.nume,
-    vatCode: dateCumparator.cnp,
-    address: { city: dateCumparator.oras, street: dateCumparator.adresa, county: dateCumparator.judet },
-    countryId: 'RO',
-    email: dateCumparator.email
-  },
-  seriesName: $env.SMARTBILL_SERIE,
-  issueDate: (t.data_vanzarii || new Date().toISOString().slice(0, 10)),
-  productName: 'Pachet acte transcriere auto — AutoAct',
-  productDescription: 'Contract v-c + cereri DRPCIV + declarații fiscale (PDF/ZIP). TVA nu se percepe — regim simplificat (art. 282 ind. 2 C.fisc.).',
-  quantity: 1,
-  price: ${PRET_RON},
-  currency: 'RON',
-  measuringUnit: 'buc',
-  saveToDraft: false,
-  sendEmail: true,
-  eInvoice: { sendEInvoice: true }
-};
-return [{ json: { ...$json, smartbill_payload: payload, order_id: $json.order_id || t.id_tranzactie } }];
-`.trim() + '\n';
+const binar = await this.helpers.prepareBinaryData(arhiva, meta.zip_nume, 'application/zip');
+return [{ json: meta, binary: { data: binar } }];`.trim() + '\n';
 
-/* ---------- Nodul 3: decriptare + verificare semnătură Netopia ----------
- * Schema MobilPay/Netopia: env_key (256 bytes) decriptat RSA-OAEP-SHA256 →
- * AES-256-CBC (IV = primele 16 bytes din cheia AES) → JSON cu
- * order_id/amount/currency/status + HMAC-SHA256 de integritate.
+/* ---------- Nodul 11: datele de livrare ----------
+ * Nu mai există facturare proprie: Stripe rulează ca Merchant of Record
+ * („Managed Payments") și îi trimite clientului factura cu TVA. Acest nod
+ * face două lucruri, amândouă necesare pentru ca e-mailul să ajungă:
+ *   · completează destinatarul din datele plății (Payment Link-ul cere
+ *     e-mail, iar profilul din DB poate să nu-l aibă încă);
+ *   · păstrează explicit faptul că suma e cea contractată, TVA inclus,
+ *     ca un viitor nod de editare să nu confunde suma cu prețul.
  */
-const DECRIPTARE_SEMNATURA = `
-const crypto = require('crypto');
-
-const CHEIE_PRIVATA = $env.NETOPIA_RSA_PRIVATE_KEY.split(String.fromCharCode(92) + 'n').join(String.fromCharCode(10));
-const MPAY_SECRET = $env.NETOPIA_MPAY_SECRET;
-const t0 = Date.now();
-
-if (!$json.data_encoded) {
-  return [{ json: { semnatura_ok: false, motiv: 'lipsa data' } }];
-}
-const buffer = Buffer.from($json.data_encoded, 'base64');
-if (buffer.length < 400) {
-  return [{ json: { semnatura_ok: false, motiv: 'date prea scurte' } }];
-}
-
-// 1. env_key = primii 256 bytes → RSA-OAEP(SHA-256)
-const envKey = buffer.subarray(0, 256);
-let aesKey;
-try {
-  aesKey = crypto.privateDecrypt(
-    { key: CHEIE_PRIVATA, padding: crypto.constants.RSA_PKCS1_OAEP_PADDING, oaepHash: 'sha256' },
-    envKey
-  );
-} catch (e) {
-  return [{ json: { semnatura_ok: false, motiv: 'rsa_fail: ' + e.message } }];
-}
-
-// 2. AES-256-CBC; IV = primele 16 bytes din AES key
-const criptat = buffer.subarray(256);
-const iv = aesKey.subarray(0, 16);
-const cheieAes = aesKey.subarray(16, 48);
-let decriptat;
-try {
-  const decipher = crypto.createDecipheriv('aes-256-cbc', cheieAes, iv);
-  decriptat = Buffer.concat([decipher.update(criptat), decipher.final()]).toString('utf8');
-} catch (e) {
-  return [{ json: { semnatura_ok: false, motiv: 'aes_fail: ' + e.message } }];
-}
-
-let date;
-try { date = JSON.parse(decriptat); }
-catch (e) { return [{ json: { semnatura_ok: false, motiv: 'json_fail' } }]; }
-
-// 3. HMAC-SHA256 pe datele esențiale (integritate)
-const hashAsteptat = crypto
-  .createHmac('sha256', MPAY_SECRET)
-  .update([date.order_id, date.amount, date.currency, date.status].join('|'))
-  .digest('hex');
-if (hashAsteptat !== date.hash) {
-  return [{ json: { semnatura_ok: false, motiv: 'hmac_fail' } }];
-}
-
+const DATE_LIVRARE = `
+// $json vine din nodul „Data Tranzacție (Postgres)" (profil + coloane
+// aplatizate), dar adresa de livrare trebuie să fie cea folosită la plată:
+// clientul o introduce la checkout, iar dosarul poate să nu o conțină.
+const t = $json;
+const email = t.email_cumparator || $json.email_plata || '';
+if (!email) throw new Error('Fără adresă de e-mail: nu se poate livre pachetul. Completează profilul sau cere clientului adresa la checkout.');
 return [{ json: {
-  semnatura_ok: true,
-  durata_ms: Date.now() - t0,
-  order_id: String(date.order_id),
-  suma: Number(date.amount),
-  moneda: String(date.currency),
-  status: String(date.status),
-  cod_eroare: date.error_code || null
+  ...t,
+  destinatar: email,
+  nume_client: t.nume_cumparator || 'Client AutoAct',
+  suma_plata: ${PRET_RON},
+  factura_emisa_de: 'stripe',
+  tva_inclus: true
 } }];
 `.trim() + '\n';
-
 /* ---------- Definiția nodurilor ---------- */
 const nodes = [];
 function add(n) { nodes.push(n); }
 
-/* 1. Webhook Netopia */
+/* 1. Webhook Stripe — cu RAW BODY obligatoriu: semnătura Stripe se
+ * calculează peste octeții exacti ai payload-ului, iar un body parsat și
+ * re-serializat ar produce alt hash. Fără „Raw Body", orice plată ar fi
+ * respinsă drept semnătură invalidă. */
 add({
   id: 'b7e5a000-0000-4000-8000-000000000001',
-  name: 'Webhook Netopia',
+  name: 'Webhook Stripe',
   type: 'n8n-nodes-base.webhook',
   typeVersion: 2,
   position: [-160, 300],
   parameters: {
     httpMethod: 'POST',
-    path: 'netopia',
+    path: 'stripe',
     responseMode: 'responseNode',
-    options: { rawBody: false }
+    options: { rawBody: true }
   },
-  webhookId: 'autoact-netopia'
+  webhookId: 'autoact-stripe'
 });
 
-/* 2. Parsare body */
+/* 2. Verificare semnătură */
 add({
   id: 'b7e5a000-0000-4000-8000-000000000002',
-  name: 'Parsare POST Netopia',
+  name: 'Verificare Semnătură',
   type: 'n8n-nodes-base.code',
   typeVersion: 2,
   position: [160, 300],
-  parameters: { mode: 'runOnceForAllItems', jsCode: PARSARE_BODY.trim() + '\n' }
+  parameters: { mode: 'runOnceForAllItems', jsCode: VERIFICARE_SEMNATURA.trim() + '\n' }
 });
 
-/* 3. Decriptare semnătură */
-add({
-  id: 'b7e5a000-0000-4000-8000-000000000003',
-  name: 'Decriptare Semnătură',
-  type: 'n8n-nodes-base.code',
-  typeVersion: 2,
-  position: [480, 300],
-  parameters: { mode: 'runOnceForAllItems', jsCode: DECRIPTARE_SEMNATURA }
-});
-
-/* 4. IF semnătură validă */
+/* 3. IF semnătură validă */
 add({
   id: 'b7e5a000-0000-4000-8000-000000000004',
   name: 'IF Semnătură Validă',
   type: 'n8n-nodes-base.if',
   typeVersion: 2,
-  position: [800, 300],
+  position: [480, 300],
   parameters: {
     conditions: {
       options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
       combinator: 'and',
       conditions: [
-        { id: 'c-semn', leftValue: '={{ $json.semnatura_ok }}', rightValue: true, operator: { type: 'boolean', operation: 'true', singleValue: true } }
+        { id: 'c-semn', leftValue: '={{ $json.semnatura_ok }}', rightValue: true, operator: { type: 'boolean', operation: 'true', singleValue: true } },
+        { id: 'c-tranz', leftValue: '={{ $json.fara_tranzactie !== true }}', rightValue: true, operator: { type: 'boolean', operation: 'true', singleValue: true } }
       ]
     }
   }
 });
 
-/* 5. Respond semnătură invalidă (ramura false) */
+/* 4. Respond semnătură invalidă (ramura false) */
 add({
   id: 'b7e5a000-0000-4000-8000-000000000005',
   name: 'Respond Semnătură Invalidă',
   type: 'n8n-nodes-base.respondToWebhook',
   typeVersion: 1.1,
-  position: [800, 520],
+  position: [480, 520],
   parameters: {
     respondWith: 'json',
     responseBody: '={{ JSON.stringify({ ok: false, motiv: $json.motiv }) }}',
-    options: { responseCode: 496 }
+    options: { responseCode: 400 }
   }
 });
 
-/* 6. Idempotență: CTE INSERT + UNION fallback — mereu exact 1 rând */
+/* 5. Idempotență: CTE INSERT + UNION fallback — mereu exact 1 rând */
 add({
   id: 'b7e5a000-0000-4000-8000-000000000006',
   name: 'Idempotenta (Postgres)',
@@ -392,7 +405,7 @@ add({
   }
 });
 
-/* 7. IF deja procesată (duplicat === 1 → true) */
+/* 6. IF deja procesată (duplicat === 1 → true) */
 add({
   id: 'b7e5a000-0000-4000-8000-000000000007',
   name: 'IF Deja Procesată',
@@ -424,7 +437,7 @@ add({
   }
 });
 
-/* 9. Data Tranzacție (Postgres): profil_json + coloane aplatizate + passthrough status/suma */
+/* 8. Data Tranzacție (Postgres): profil_json + coloane aplatizate + passthrough status/suma */
 add({
   id: 'b7e5a000-0000-4000-8000-000000000013',
   name: 'Data Tranzacție (Postgres)',
@@ -433,12 +446,12 @@ add({
   position: [1600, 300],
   parameters: {
     operation: 'executeQuery',
-    query: "SELECT id_tranzactie, profil_json, nume_cumparator, cnp_cumparator, adresa_cumparator, localitate_cumparator, judet_cumparator, email_cumparator, data_vanzarii, '{{ $json.status }}' AS status, {{ $json.suma }} AS suma FROM tranzactii WHERE id_tranzactie = '{{ $json.order_id }}' LIMIT 1;",
+    query: "SELECT id_tranzactie, profil_json, nume_cumparator, cnp_cumparator, adresa_cumparator, localitate_cumparator, judet_cumparator, email_cumparator, data_vanzarii, '{{ $json.status }}' AS status, {{ $json.suma }} AS suma, '{{ $json.email }}' AS email_plata FROM tranzactii WHERE id_tranzactie = '{{ $json.order_id }}' LIMIT 1;",
     options: {}
   }
 });
 
-/* 10. IF plată confirmată */
+/* 9. IF plată confirmată */
 add({
   id: 'b7e5a000-0000-4000-8000-000000000009',
   name: 'IF Plată Confirmată',
@@ -451,13 +464,14 @@ add({
       combinator: 'and',
       conditions: [
         { id: 'c-status', leftValue: '={{ $json.status }}', rightValue: 'confirmed', operator: { type: 'string', operation: 'equals' } },
+        { id: 'c-moneda', leftValue: '={{ $json.moneda }}', rightValue: 'RON', operator: { type: 'string', operation: 'equals' } },
         { id: 'c-suma', leftValue: '={{ $json.suma }}', rightValue: PRET_RON, operator: { type: 'number', operation: 'equals' } }
       ]
     }
   }
 });
 
-/* 11. Respins (ramura false) */
+/* 10. Respins (ramura false) */
 add({
   id: 'b7e5a000-0000-4000-8000-000000000010',
   name: 'Respond Plată Respinsă',
@@ -471,37 +485,19 @@ add({
   }
 });
 
-/* 12. Payload SmartBill */
+/* 11. Date Livrare (Code): destinatar + suma contractată.
+ * Factura NU se generează aici — Stripe o emite și o trimite clientului,
+ * fiindcă rulează ca Merchant of Record. */
 add({
   id: 'b7e5a000-0000-4000-8000-000000000011',
-  name: 'Payload SmartBill',
+  name: 'Date Livrare',
   type: 'n8n-nodes-base.code',
   typeVersion: 2,
   position: [2240, 300],
-  parameters: { mode: 'runOnceForAllItems', jsCode: PAYLOAD_SMARTBILL.trim() + '\n' }
+  parameters: { mode: 'runOnceForAllItems', jsCode: DATE_LIVRARE.trim() + '\n' }
 });
 
-/* 13. SmartBill POST */
-add({
-  id: 'b7e5a000-0000-4000-8000-000000000012',
-  name: 'SmartBill Factură',
-  type: 'n8n-nodes-base.httpRequest',
-  typeVersion: 4.2,
-  position: [2560, 300],
-  parameters: {
-    method: 'POST',
-    url: 'https://ws.smartbill.ro:8183/SBORO/api/document/new',
-    authentication: 'genericCredentialType',
-    genericAuthType: 'httpBasicAuth',
-    sendBody: true,
-    specifyBody: 'json',
-    jsonBody: '={{ JSON.stringify($json.smartbill_payload) }}',
-    options: { timeout: 30000 }
-  },
-  credentials: { httpBasicAuth: { id: 'REPLACE_CRED_SMARTBILL', name: 'SmartBill Basic Auth' } }
-});
-
-/* 14. Placeholder-e Docs */
+/* 12. Placeholder-e Docs */
 add({
   id: 'b7e5a000-0000-4000-8000-000000000014',
   name: 'Placeholder-e Docs',
@@ -511,7 +507,7 @@ add({
   parameters: { mode: 'runOnceForAllItems', jsCode: PLACEHOLDERE_DOCS }
 });
 
-/* 15. Copie Template (Drive) — template-ul NU se modifică niciodată */
+/* 13. Copie Template (Drive) — template-ul NU se modifică niciodată */
 add({
   id: 'b7e5a000-0000-4000-8000-000000000015',
   name: 'Copie Template (Drive)',
@@ -530,7 +526,7 @@ add({
   }
 });
 
-/* 16. Docs batchUpdate: replaceAllText ×37 pe copie */
+/* 14. Docs batchUpdate: replaceAllText ×37 pe copie */
 add({
   id: 'b7e5a000-0000-4000-8000-000000000016',
   name: 'Docs batchUpdate',
@@ -549,7 +545,7 @@ add({
   }
 });
 
-/* 17. Export PDF (Drive) — responseFormat file → binar */
+/* 15. Export PDF (Drive) — responseFormat file → binar */
 add({
   id: 'b7e5a000-0000-4000-8000-000000000017',
   name: 'Export PDF (Drive)',
@@ -565,7 +561,7 @@ add({
   }
 });
 
-/* 18. Șterge Copia (Drive) — fără gunoi în Drive */
+/* 16. Șterge Copia (Drive) — fără gunoi în Drive */
 add({
   id: 'b7e5a000-0000-4000-8000-000000000018',
   name: 'Șterge Copia (Drive)',
@@ -581,7 +577,7 @@ add({
   }
 });
 
-/* 19. ZIP Pachet */
+/* 17. ZIP Pachet */
 add({
   id: 'b7e5a000-0000-4000-8000-000000000019',
   name: 'ZIP Pachet',
@@ -591,7 +587,7 @@ add({
   parameters: { mode: 'runOnceForAllItems', jsCode: ZIP_PACHET }
 });
 
-/* 20. Gmail Livrare ZIP */
+/* 18. Gmail Livrare ZIP */
 add({
   id: 'b7e5a000-0000-4000-8000-000000000020',
   name: 'Gmail Livrare ZIP',
@@ -600,7 +596,7 @@ add({
   position: [4800, 300],
   parameters: {
     sendTo: '={{ $json.destinatar }}',
-    subject: 'AutoAct — actele tale pentru transcriere auto sunt gata (ZIP + factură)',
+    subject: 'AutoAct — actele tale pentru transcriere auto sunt gata (ZIP)',
     emailType: 'html',
     message: '=<p>Bună, {{ $json.nume_client }},</p><p>Pachetul tău de acte este gata și îl găsești atașat, împreună cu factura.</p><h3>Ce faci după ce printezi actele</h3><ol><li>Printează PDF-urile din arhivă.</li><li>Mergi ÎNTÂI la notar cu mașina și actele originale pentru autentificarea contractului.</li><li>Semnați amândoi în fața notarului.</li><li>Mergi la DRPCIV cu contractul autentificat, CI, CIV original și dovada plății taxei de transcriere.</li><li>Primești noua înmatriculare.</li></ol><p>Verifică toate datele înainte de printare — actele se emit exact cu datele confirmate de tine la pasul de verificare.</p><p>Cu stimă,<br><strong>Echipa AutoAct</strong><br>autoact.eu</p>',
     options: { appendAttribution: false }
@@ -616,7 +612,7 @@ add({
   position: [-220, -80],
   parameters: {
     width: 560, height: 300, color: 4,
-    content: '## INSTALARE — AutoAct Plăți + Documente (Netopia → SmartBill → Docs → ZIP)\\n1) n8n → ⋯ → **Import from File** → acest JSON.\\n2) **Schema DB:** rulează o dată module-5/plati-schema.sql (docker compose exec -T postgres psql -U autoact -d autoact).\\n3) **Env (docker-compose.yml):** NETOPIA_RSA_PRIVATE_KEY, NETOPIA_MPAY_SECRET, SMARTBILL_VAT_CODE, SMARTBILL_SERIE, GOOGLE_DOCS_TEMPLATE_CONTRACT, GOOGLE_DOCS_TEMPLATE_DRPCIV, GOOGLE_DOCS_TEMPLATE_DECLARATII.\\n4) **Credentials n8n:** SmartBill Basic Auth + Google OAuth2 (Drive + Docs scope-uri) — nodurile 15–18.\\n5) **Netopia:** URL de confirmare https://autoact.eu/webhook/netopia.\\n6) Activează workflow-ul.'
+    content: '\n## INSTALARE — AutoAct Plăți + Documente (Stripe → Docs → ZIP)\n1) n8n → ⋯ → **Import from File** → acest JSON.\n2) **Schema DB:** rulează o dată module-5/plati-schema.sql (docker compose exec -T postgres psql -U autoact -d autoact).\n3) **Env (docker-compose.yml):** STRIPE_WEBHOOK_SECRET, GOOGLE_DOCS_TEMPLATE_CONTRACT / _DRPCIV / _DECLARATII.\n4) **Credentials n8n:** Google OAuth2 (Drive + Docs scope-uri) — nodurile 12–15.\n5) **Stripe:** Developers → Webhooks → endpoint POST https://autoact.eu/webhook/stripe, evenimentul checkout.session.completed. Copiază Signing secret în .env ca STRIPE_WEBHOOK_SECRET.\n6) Activează workflow-ul.\n⚠ Facturarea NU e aici: Stripe rulează ca Merchant of Record („Managed Payments”) și emite factura cu TVA direct către client.'
   }
 });
 add({
@@ -627,7 +623,7 @@ add({
   position: [420, 560],
   parameters: {
     width: 420, height: 220, color: 5,
-    content: '### Semnătura Netopia (nodul 3)\\n1) env_key = primii 256 bytes → RSA-OAEP-SHA256 cu cheia privată.\\n2) AES-256-CBC, IV = primele 16 bytes din AES key.\\n3) HMAC-SHA256 pe order_id|amount|currency|status cu MPAY_SECRET.\\nOrice eșec → răspuns 496, fără alertă admin.\\n⚠ Necesită NODE_FUNCTION_ALLOW_BUILTIN=fs,path,crypto (Modulul 3).'
+    content: '\n### Semnătura Stripe (nodul 2)\nAntetul Stripe-Signature are forma t=<unix>,v1=<hex>.\nSemnătura = HMAC-SHA256(STRIPE_WEBHOOK_SECRET, „<t>.<body>”) peste **octeții exacti** ai body-ului → de aceea nodul Webhook are RAW BODY pornit.\nComparația e cu timingSafeEqual (constantă în timp) și orice antet mai vechi de 300 s e refuzat.\nOrice eșec → răspuns 400, fără alertă admin.\n⚠ Necesită NODE_FUNCTION_ALLOW_BUILTIN=fs,path,crypto (Modulul 3).'
   }
 });
 add({
@@ -638,7 +634,7 @@ add({
   position: [1380, 560],
   parameters: {
     width: 460, height: 200, color: 6,
-    content: '### Idempotență pe order_id (nodul 6)\\nCTE INSERT ... ON CONFLICT DO NOTHING + UNION fallback → mereu exact 1 rând: duplicat=0 (prima dată) sau duplicat=1 (retransmisie).\\nRetransmisiile Netopia mor aici — zero facturi duplicate.'
+    content: '\n### Idempotență pe order_id (nodul 5)\nCTE INSERT ... ON CONFLICT DO NOTHING + UNION fallback → mereu exact 1 rând: duplicat=0 (prima dată) sau duplicat=1 (retransmisie).\nRetransmisiile Stripe mor aici — zero pachete livrate de două ori.\norder_id = client_reference_id pus de Payment Link = id_tranzactie.'
   }
 });
 add({
@@ -649,34 +645,32 @@ add({
   position: [2820, 560],
   parameters: {
     width: 520, height: 220, color: 3,
-    content: '### Generare Documente (nodurile 14–18)\\nTemplate-urile Google Docs NU se modifică niciodată: nodul 15 face o COPIE per document, nodul 16 aplică replaceAllText ×37, nodul 17 exportă PDF, nodul 18 ȘTERGE copia.\\nID-urile șabloanelor vin din env: GOOGLE_DOCS_TEMPLATE_CONTRACT / _DRPCIV / _DECLARATII.\\nZIP-ul (nodul 19) e construit inline (CRC32 + STORE, zero npm).'
+    content: '### Generare Documente (nodurile 12–16)\\nTemplate-urile Google Docs NU se modifică niciodată: nodul 13 face o COPIE per document, nodul 14 aplică replaceAllText ×37, nodul 15 exportă PDF, nodul 16 ȘTERGE copia.\\nID-urile șabloanelor vin din env: GOOGLE_DOCS_TEMPLATE_CONTRACT / _DRPCIV / _DECLARATII.\\nZIP-ul (nodul 17) e construit inline (CRC32 + STORE, zero npm).'
   }
 });
 
 /* ---------- Conexiuni ---------- */
 const next = (name) => [{ node: name, type: 'main', index: 0 }];
 const connections = {
-  'Webhook Netopia':           { main: [next('Parsare POST Netopia')] },
-  'Parsare POST Netopia':      { main: [next('Decriptare Semnătură')] },
-  'Decriptare Semnătură':      { main: [next('IF Semnătură Validă')] },
-  'IF Semnătură Validă':       { main: [next('Idempotenta (Postgres)'), next('Respond Semnătură Invalidă')] },
-  'Idempotenta (Postgres)':    { main: [next('IF Deja Procesată')] },
-  'IF Deja Procesată':         { main: [next('Respond Deja Procesată'), next('Data Tranzacție (Postgres)')] },
+  'Webhook Stripe':           { main: [next('Verificare Semnătură')] },
+  'Verificare Semnătură':     { main: [next('IF Semnătură Validă')] },
+  'IF Semnătură Validă':      { main: [next('Idempotenta (Postgres)'), next('Respond Semnătură Invalidă')] },
+  'Idempotenta (Postgres)':   { main: [next('IF Deja Procesată')] },
+  'IF Deja Procesată':        { main: [next('Respond Deja Procesată'), next('Data Tranzacție (Postgres)')] },
   'Data Tranzacție (Postgres)': { main: [next('IF Plată Confirmată')] },
-  'IF Plată Confirmată':       { main: [next('Payload SmartBill'), next('Respond Plată Respinsă')] },
-  'Payload SmartBill':         { main: [next('SmartBill Factură')] },
-  'SmartBill Factură':         { main: [next('Placeholder-e Docs')] },
-  'Placeholder-e Docs':        { main: [next('Copie Template (Drive)')] },
-  'Copie Template (Drive)':    { main: [next('Docs batchUpdate')] },
-  'Docs batchUpdate':          { main: [next('Export PDF (Drive)')] },
-  'Export PDF (Drive)':        { main: [next('Șterge Copia (Drive)')] },
-  'Șterge Copia (Drive)':      { main: [next('ZIP Pachet')] },
-  'ZIP Pachet':                { main: [next('Gmail Livrare ZIP')] }
+  'IF Plată Confirmată':      { main: [next('Date Livrare'), next('Respond Plată Respinsă')] },
+  'Date Livrare':             { main: [next('Placeholder-e Docs')] },
+  'Placeholder-e Docs':       { main: [next('Copie Template (Drive)')] },
+  'Copie Template (Drive)':   { main: [next('Docs batchUpdate')] },
+  'Docs batchUpdate':         { main: [next('Export PDF (Drive)')] },
+  'Export PDF (Drive)':       { main: [next('Șterge Copia (Drive)')] },
+  'Șterge Copia (Drive)':     { main: [next('ZIP Pachet')] },
+  'ZIP Pachet':               { main: [next('Gmail Livrare ZIP')] }
 };
 
 /* ---------- Asamblare + scriere ---------- */
 const workflow = {
-  name: 'AutoAct — Plăți Netopia + Facturare SmartBill + Documente (v1)',
+  name: 'AutoAct — Plăți Stripe (Merchant of Record) + Documente (v1)',
   nodes,
   connections,
   active: false,
@@ -707,8 +701,10 @@ const REQUIRE_MOCK = (nume) => {
 };
 REQUIRE_MOCK.cache = {};
 function simuleaza(jsCode, ctx) {
-  const fn = new AsyncFunction('$json', '$env', 'items', 'require', jsCode);
-  return fn.call({ helpers: ctx.helpers || {} }, ctx.$json || {}, ctx.$env || {}, ctx.items || [], ctx.requireMock || REQUIRE_MOCK);
+  /* `$` e funcția n8n de acces la ieșirea altor noduri ($('Nod').first()) —
+   * fără ea, un nod care o folosește nu ar putea fi simulat deloc. */
+  const fn = new AsyncFunction('$json', '$env', 'items', 'require', '$', jsCode);
+  return fn.call({ helpers: ctx.helpers || {} }, ctx.$json || {}, ctx.$env || {}, ctx.items || [], ctx.requireMock || REQUIRE_MOCK, ctx.$);
 }
 function evalueazaExpresie(expr, json, env) {
   if (typeof expr !== 'string' || !expr.startsWith('=')) return expr;
@@ -722,7 +718,7 @@ function evalueazaExpresie(expr, json, env) {
 (async () => {
   // (a) JSON re-parse + structură
   const citit = JSON.parse(fs.readFileSync(OUT, 'utf8'));
-  assert(citit.nodes.length === 24, 'JSON valid cu 24 noduri (20 pipeline + 4 sticky) — găsite: ' + citit.nodes.length);
+  assert(citit.nodes.length === 22, 'JSON valid cu 22 noduri (18 pipeline + 4 sticky) — găsite: ' + citit.nodes.length);
 
   const numeSet = new Set(citit.nodes.map((n) => n.name));
   let muchii = 0;
@@ -733,14 +729,14 @@ function evalueazaExpresie(expr, json, env) {
       if (!numeSet.has(tinta.node)) assert(false, 'țintă inexistentă: ' + tinta.node);
     }
   }
-  assert(muchii === 19, '19 muchii în graf — găsite: ' + muchii);
+  assert(muchii === 17, '17 muchii în graf (14 liniare + 3 ramuri IF) — găsite: ' + muchii);
   const adiacenta = {};
   for (const [sursa, con] of Object.entries(citit.connections)) {
     adiacenta[sursa] = adiacenta[sursa] || [];
     for (const ramura of con.main) for (const tinta of ramura) adiacenta[sursa].push(tinta.node);
   }
-  const vazute = new Set(['Webhook Netopia']);
-  const coada = ['Webhook Netopia'];
+  const vazute = new Set(['Webhook Stripe']);
+  const coada = ['Webhook Stripe'];
   while (coada.length) {
     const curent = coada.shift();
     for (const urm of adiacenta[curent] || []) if (!vazute.has(urm)) { vazute.add(urm); coada.push(urm); }
@@ -748,12 +744,32 @@ function evalueazaExpresie(expr, json, env) {
   const pipeline = citit.nodes.filter((n) => n.type !== 'n8n-nodes-base.stickyNote');
   assert(vazute.size === pipeline.length, 'graf conex: ' + vazute.size + '/' + pipeline.length + ' accesibile de la Webhook');
 
+  /* Nodurile Netopia/SmartBill nu mai au ce căuta aici: prezența lor
+   * ar însemna o factură dublă sau o ramură moartă în workflow. */
+  const numeNodos = citit.nodes.map((n) => n.name).join(' | ');
+  assert(!/Netopia|SmartBill|MobilPay/i.test(numeNodos), 'niciun nod Netopia/SmartBill a rămas în workflow');
+
+  /* RAW BODY e condiția de existență a verificării: fără el, hash-ul
+   * nu s-ar potrivi niciodată și fiecare plată ar fi respinsă. */
+  const nodWebhook = citit.nodes.find((n) => n.name === 'Webhook Stripe');
+  assert(nodWebhook.parameters.options.rawBody === true, 'Webhook Stripe: RAW BODY pornit (obligatoriu pentru verificarea semnăturii)');
+  assert(nodWebhook.parameters.path === 'stripe', 'Webhook Stripe: calea /webhook/stripe');
+
   // (b) Ramurile IF pe pozițiile corecte
   const c = citit.connections;
-  assert(c['IF Semnătură Validă'].main[0][0].node === 'Idempotenta (Postgres)' && c['IF Semnătură Validă'].main[1][0].node === 'Respond Semnătură Invalidă', 'IF Semnătură: true→Postgres, false→496');
+  assert(c['IF Semnătură Validă'].main[0][0].node === 'Idempotenta (Postgres)' && c['IF Semnătură Validă'].main[1][0].node === 'Respond Semnătură Invalidă', 'IF Semnătură: true→Postgres, false→400');
   assert(c['IF Deja Procesată'].main[0][0].node === 'Respond Deja Procesată' && c['IF Deja Procesată'].main[1][0].node === 'Data Tranzacție (Postgres)', 'IF Deja: true→duplicat, false→Data Tranzacție');
-  assert(c['IF Plată Confirmată'].main[0][0].node === 'Payload SmartBill' && c['IF Plată Confirmată'].main[1][0].node === 'Respond Plată Respinsă', 'IF Plată: true→SmartBill, false→respins');
-  assert(c['SmartBill Factură'].main[0][0].node === 'Placeholder-e Docs' && c['ZIP Pachet'].main[0][0].node === 'Gmail Livrare ZIP', 'lanț: SmartBill→Docs→...→ZIP→Gmail');
+  assert(c['IF Plată Confirmată'].main[0][0].node === 'Date Livrare' && c['IF Plată Confirmată'].main[1][0].node === 'Respond Plată Respinsă', 'IF Plată: true→Date Livrare, false→respins');
+  assert(c['Date Livrare'].main[0][0].node === 'Placeholder-e Docs' && c['ZIP Pachet'].main[0][0].node === 'Gmail Livrare ZIP', 'lanț: Livrare→Docs→...→ZIP→Gmail');
+  assert(citit.nodes.find((n) => n.name === 'Respond Semnătură Invalidă').parameters.options.responseCode === 400, 'semnătură invalidă → HTTP 400');
+
+  /* Prețul trebuie să fie exact cel din config.js — o cifră scrisă în
+   * workflow ar însemna o plată acceptată la altă sumă decât cea site. */
+  const conds = citit.nodes.find((n) => n.name === 'IF Plată Confirmată').parameters.conditions.conditions;
+  const condSuma = conds.find((x) => x.id === 'c-suma');
+  assert(condSuma.rightValue === PRET_RON, 'IF Plată Confirmată: suma comparată cu prețul din config.js (' + PRET_RON + ' RON)');
+  const condMoneda = conds.find((x) => x.id === 'c-moneda');
+  assert(!!condMoneda && condMoneda.rightValue === 'RON', 'IF Plată Confirmată: se verifică și moneda (RON), nu doar suma');
 
   // (c) Sintaxa TUTUROR expresiilor din workflow (nicio expresie invalidă)
   let expresiiVerificate = 0, expresiiRele = [];
@@ -770,23 +786,95 @@ function evalueazaExpresie(expr, json, env) {
   for (const n of citit.nodes) parcurge(n.parameters, n.name);
   assert(expresiiRele.length === 0, 'toate cele ' + expresiiVerificate + ' expresii au sintaxă JS validă', expresiiRele.join(' | '));
 
-  // (d) Simulare criptografică — vectori RSA 2048 + AES-256-CBC generați local
+  /* (d) Semnătura Stripe — simulare REALĂ, cu require('crypto') adevărat.
+   * Nu verificăm doar „merge": verificăm și că fiecare sabotaj posibil
+   * e respins. Un webhook care acceptă un corp modificat ar lăsa orice
+   * persoană să declanșeze generarea documentelor fără plată. */
   const crypto = require('crypto');
-  const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
-  // pentru simularea REALĂ a nodului 3 folosim require adevărat (nu mock-ul) — ctxDecript e definit după ENV mai jos
-  const MPAY_SECRET = 'secret-de-test';
-  const comanda = { order_id: 'tr_ab12cd34ef56ab12', amount: PRET_RON, currency: 'RON', status: 'confirmed', error_code: null };
-  comanda.hash = crypto.createHmac('sha256', MPAY_SECRET).update([comanda.order_id, comanda.amount, comanda.currency, comanda.status].join('|')).digest('hex');
-  const aesKey = crypto.randomBytes(48);
-  const cipher = crypto.createCipheriv('aes-256-cbc', aesKey.subarray(16, 48), aesKey.subarray(0, 16));
-  const criptat = Buffer.concat([cipher.update(Buffer.from(JSON.stringify(comanda))), cipher.final()]);
-  const envKey = crypto.publicEncrypt({ key: publicKey, padding: crypto.constants.RSA_PKCS1_OAEP_PADDING, oaepHash: 'sha256' }, aesKey);
-  const ENV = { NETOPIA_RSA_PRIVATE_KEY: privateKey.export({ type: 'pkcs1', format: 'pem' }).toString(), NETOPIA_MPAY_SECRET: MPAY_SECRET };
-  const nodDecript = citit.nodes.find((n) => n.name === 'Decriptare Semnătură');
-  const outSemn = await simuleaza(nodDecript.parameters.jsCode, { $json: { data_encoded: Buffer.concat([envKey, criptat]).toString('base64') }, $env: ENV, requireMock: require });
-  assert(outSemn[0].json.semnatura_ok === true && outSemn[0].json.order_id === 'tr_ab12cd34ef56ab12', 'Decriptare: semnătură validă acceptată + order_id extras');
+  const SECRET = 'whsec_test_0123456789abcdef';
+  const nodSemn = citit.nodes.find((n) => n.name === 'Verificare Semnătură');
+  const ENV = { STRIPE_WEBHOOK_SECRET: SECRET };
+  const codSemn = nodSemn.parameters.jsCode;
+  /* crypto trebuie permis explicit în simulare, ca în n8n (NODE_FUNCTION_ALLOW_BUILTIN) */
+  assert(/require\('crypto'\)/.test(codSemn), 'nodul de semnătură folosește crypto nativ (nu un algoritm scris cu ochiul)');
+  assert(/timingSafeEqual/.test(codSemn), 'compararea semnăturii e cu timingSafeEqual (constantă în timp)');
+  assert(!/\.digest\('hex'\)\s*(!==|===|==)/.test(codSemn) && !/a\s*!==\s*b/.test(codSemn.replace(/\/\*[\s\S]*?\*\//g, '')),
+    'semnătura nu e comparată cu != / === pe șiruri (comparare în timp variabil)');
 
-  // (e) Simulare nodul 14 (Placeholder-e Docs) pe profilul din Test Data Kit
+  function antetStripe(payload, secret, ts) {
+    const t = ts || Math.floor(Date.now() / 1000);
+    const v1 = crypto.createHmac('sha256', secret).update(t + '.' + payload, 'utf8').digest('hex');
+    return { t, antet: 't=' + t + ',v1=' + v1 };
+  }
+  function evenimentStripe(over) {
+    return JSON.stringify(Object.assign({
+      id: 'evt_1AbCdEfGhIjKlMnOp',
+      type: 'checkout.session.completed',
+      data: { object: {
+        client_reference_id: 'tr_ab12cd34ef56ab12',
+        amount_total: PRET_RON * 100,
+        currency: 'ron',
+        payment_status: 'paid',
+        customer_details: { email: 'cumparator2@example.com' }
+      } }
+    }, over || {}));
+  }
+  async function ruleazaSemnatura(payload, antet, env) {
+    const out = await simuleaza(codSemn, {
+      $json: { body: Buffer.from(payload, 'utf8'), headers: { 'stripe-signature': antet } },
+      $env: env || ENV,
+      requireMock: require
+    });
+    return out[0].json;
+  }
+
+  const payloadBun = evenimentStripe();
+  const hBun = antetStripe(payloadBun, SECRET);
+  const ok = await ruleazaSemnatura(payloadBun, hBun.antet);
+  assert(ok.semnatura_ok === true && ok.order_id === 'tr_ab12cd34ef56ab12',
+    'Semnătură validă acceptată + order_id (client_reference_id) extras');
+  assert(ok.suma === PRET_RON && ok.moneda === 'RON',
+    'Suma e normalizată din unități mici în lei (' + PRET_RON + ' RON), nu 4900');
+  assert(ok.status === 'confirmed', 'eveniment checkout.session.completed + paid → status confirmed');
+
+  const hFals = antetStripe(payloadBun, 'whsec_test_altsemnatURAAA');
+  const fals = await ruleazaSemnatura(payloadBun, hFals.antet);
+  assert(fals.semnatura_ok === false && fals.motiv === 'semnatura_invalida',
+    'semnătură calculată cu alt secret → respinsă (' + fals.motiv + ')');
+
+  const hOk = antetStripe(payloadBun, SECRET);
+  const corpModificat = await ruleazaSemnatura(payloadBun.replace('"paid"', '"unpaid"'), hOk.antet);
+  assert(corpModificat.semnatura_ok === false,
+    'corp modificat cu antet valid → respins (de aceea semnătura e pe octeții exacti, nu pe obiectul parsat)');
+
+  const hVechi = antetStripe(payloadBun, SECRET, Math.floor(Date.now() / 1000) - 3600);
+  const vechi = await ruleazaSemnatura(payloadBun, hVechi.antet);
+  assert(vechi.semnatura_ok === false && vechi.motiv === 'semnatura_expirata',
+    'antet vechi de o oră (body capturat) → respins (' + vechi.motiv + ')');
+
+  const faraSemnatura = await ruleazaSemnatura(payloadBun, '');
+  assert(faraSemnatura.semnatura_ok === false && faraSemnatura.motiv === 'antet_invalid',
+    'fără antet Stripe-Signature → respins (' + faraSemnatura.motiv + ')');
+
+  const faraSecret = await ruleazaSemnatura(payloadBun, hBun.antet, {});
+  assert(faraSecret.semnatura_ok === false && faraSecret.motiv === 'secret_lipsa',
+    'STRIPE_WEBHOOK_SECRET neconfigurat → respins, nu „acceptat orbește" (' + faraSecret.motiv + ')');
+
+  const outParsat = await simuleaza(codSemn, {
+    $json: { body: JSON.parse(payloadBun), headers: { 'stripe-signature': hBun.antet } },
+    $env: ENV, requireMock: require
+  });
+  assert(outParsat[0].json.semnatura_ok === false && outParsat[0].json.motiv === 'body_raw_lipsa',
+    'body parsat în loc de raw → respins (nu se „reconstruiește" un hash din obiect)');
+
+  const payloadFaraRef = evenimentStripe({
+    data: { object: { amount_total: PRET_RON * 100, currency: 'ron', payment_status: 'paid' } }
+  });
+  const faraRef = await ruleazaSemnatura(payloadFaraRef, antetStripe(payloadFaraRef, SECRET).antet);
+  assert(faraRef.semnatura_ok === true && faraRef.fara_tranzactie === true,
+    'plată fără client_reference_id → semnătură OK dar marcată fără tranzacție (IF-ul o respinge)');
+
+  // (e) Simulare nodul 11 (Placeholder-e Docs) pe profilul din Test Data Kit
   const kit = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'module-1', 'test-data-kit.json'), 'utf8')).intrari;
   const nodPh = citit.nodes.find((n) => n.name === 'Placeholder-e Docs');
   const ENV_DOCS = { GOOGLE_DOCS_TEMPLATE_CONTRACT: 'DOCID_CONTRACT', GOOGLE_DOCS_TEMPLATE_DRPCIV: 'DOCID_DRPCIV', GOOGLE_DOCS_TEMPLATE_DECLARATII: 'DOCID_DECL' };
@@ -808,7 +896,7 @@ function evalueazaExpresie(expr, json, env) {
   const reqNume = outPh[0].json.requests.find((r) => r.replaceAllText.containsText.text === '{{vanzator_nume}}');
   assert(reqNume.replaceAllText.replaceText === kit[0].nume_fictiv, 'Placeholder-e Docs: {{vanzator_nume}} = numele din kit');
 
-  // (f) Simulare lanț 15→19: expresii reale + ZIP pe PDF-uri fake
+  // (f) Simulare lanț 12→16: expresii reale + ZIP pe PDF-uri fake
   const docIdCopie = 'COPIE_123';
   const item = outPh[0].json;
   const nodCopie = citit.nodes.find((n) => n.name === 'Copie Template (Drive)');
@@ -833,25 +921,78 @@ function evalueazaExpresie(expr, json, env) {
 
   // ZIP: 3 PDF-uri fake cu semnături PK reale
   const nodZip = citit.nodes.find((n) => n.name === 'ZIP Pachet');
-  const fakePdfs = ['01-contract-vanzare-cumparare', '02-cerere-drpciv', '03-declaratii-fiscale'].map((nume, i) => ({
-    json: { id_tranzactie: profil.id_tranzactie, destinatar: 'cumparator2@example.com', nume_client: kit[1].nume_fictiv, zip_nume: profil.id_tranzactie + '.zip', nume_pdf: nume + '.pdf' },
-    binary: { data: { data: Buffer.from('%PDF-1.7\\n' + 'X'.repeat(1000 + i * 500)).toString('base64'), mimeType: 'application/pdf' } }
+  /* Simularea reproduce cea mai incomodă realitate: nodurile HTTP Drive
+   * (Copie → batchUpdate → Export → Șterge) înlocuiesc $json cu răspunsul
+   * lor, deci items[].json NU mai conține destinatarul sau numele fișierului.
+   * De aceea ZIP-ul le ia din lista canonică și din nodul „Date Livrare" —
+   * și simularea de mai jos ar trebui să CADĂ dacă s-ar întoarce la items[]. */
+  const LIVRARE = {
+    id_tranzactie: profil.id_tranzactie,
+    destinatar: 'cumparator2@example.com',
+    nume_client: kit[1].nume_fictiv
+  };
+  const fakePdfs = ['raspuns-drive-1', 'raspuns-drive-2', 'raspuns-drive-3'].map((ceDa, i) => ({
+    json: { /* ce întoarce Google Drive, nu datele noastre */ id: 'COPIE_' + i, name: 'doc-' + i },
+    binary: { data: { data: Buffer.from('%PDF-1.7\n' + 'X'.repeat(1000 + i * 500)).toString('base64'), mimeType: 'application/pdf' } }
   }));
   const helpersZip = { getBinaryDataBuffer: async (i, k) => Buffer.from(fakePdfs[i].binary.data.data, 'base64'), prepareBinaryData: async (buf, nume) => ({ data: buf.toString('base64'), fileName: nume, mimeType: 'application/zip' }) };
-  const outZip = await simuleaza(nodZip.parameters.jsCode, { items: fakePdfs, helpers: helpersZip, $json: {}, $env: {} });
+  const $mock = (nume) => {
+    if (nume !== 'Date Livrare') throw new Error('nod necunoscut în expresie: ' + nume);
+    return { first: () => ({ json: LIVRARE }) };
+  };
+  const outZip = await simuleaza(nodZip.parameters.jsCode, { items: fakePdfs, helpers: helpersZip, $json: {}, $env: {}, $: $mock });
   const zipBuf = Buffer.from(outZip[0].binary.data.data, 'base64');
   assert(zipBuf.readUInt32LE(0) === 0x04034b50 && zipBuf.readUInt32LE(zipBuf.length - 22) === 0x06054b50, 'ZIP Pachet: semnăturile PK local header + EOCD prezente');
   const eocdCount = zipBuf.readUInt16LE(zipBuf.length - 22 + 10);
   assert(eocdCount === 3, 'ZIP Pachet: 3 intrări în arhivă — obținute: ' + eocdCount);
 
-  // (g) Payload SmartBill pe profil aplatizat (după refactor t=$json)
-  const nodPayload = citit.nodes.find((n) => n.name === 'Payload SmartBill');
-  const outPayload = await simuleaza(nodPayload.parameters.jsCode, {
-    $json: { order_id: profil.id_tranzactie, nume_cumparator: kit[1].nume_fictiv, cnp_cumparator: kit[1].cnp, adresa_cumparator: kit[1].adresa_fictiva, localitate_cumparator: kit[1].localitate, judet_cumparator: kit[1].judet, email_cumparator: 'cumparator2@example.com', data_vanzarii: '2026-09-26' },
-    $env: { SMARTBILL_VAT_CODE: 'RO12345678', SMARTBILL_SERIE: 'AUTOACT' }
+  /* Nume de fișier: se citesc din lista canonică, nu din răspunsul Drive. */
+  const numeDinZip = [];
+  for (const p of fakePdfs) {
+    const nume = p.json.nume_pdf;
+    if (!nume) continue;
+    const offset = zipBuf.indexOf(Buffer.from(nome, 'utf8'));
+    if (offset !== -1) numeDinZip.push(nume);
+  }
+  assert(numeDinZip.length === 0 && zipBuf.includes(Buffer.from('01-contract-vanzare-cumparare.pdf', 'utf8')),
+    'ZIP Pachet: numele PDF-urilor vin din lista canonică (nu din răspunsul Drive, care le-a pierdut)');
+  assert(zipBuf.includes(Buffer.from('02-cerere-drpciv.pdf', 'utf8')) && zipBuf.includes(Buffer.from('03-declaratii-fiscale.pdf', 'utf8')),
+    'ZIP Pachet: toate cele 3 nume canonice apar în arhivă');
+  assert(outZip[0].json.destinatar === 'cumparator2@example.com' && outZip[0].json.nume_client === kit[1].nume_fictiv,
+    'ZIP Pachet: destinatarul și numele vin din nodul Date Livrare (nu din items[].json)');
+  assert(outZip[0].binary.data.fileName === profil.id_tranzactie + '.zip',
+    'ZIP Pachet: arhiva se numește după tranzacție — obținut: ' + outZip[0].binary.data.fileName);
+
+  /* Fără Date Livrare, ZIP-ul nu se construiește — livrăm doar dacă ajunge. */
+  let faraLivrare = '';
+  try {
+    await simuleaza(nodZip.parameters.jsCode, {
+      items: fakePdfs, helpers: helpersZip, $json: {}, $env: {},
+      $: () => ({ first: () => ({ json: {} }) })
+    });
+  } catch (e) { faraLivrare = e.message; }
+  assert(/destinatar/i.test(faraLivrare), 'ZIP Pachet: fără destinatar se oprește, nu livrează un ZIP fără cineva');
+
+  /* (g) Date Livrare: destinatarul se ia din plată când dosarul nu-l are,
+   * iar fără adresă fluxul se oprește cu un mesaj explicit (nu livrăm
+   * un ZIP fără destinatar și nu cheltuim creditele Google pe nimic). */
+  const nodLivrare = citit.nodes.find((n) => n.name === 'Date Livrare');
+  const randLivrare = { id_tranzactie: profil.id_tranzactie, nume_cumparator: kit[1].nume_fictiv, email_cumparator: '', email_plata: 'cumparator2@example.com' };
+  const outLivrare = await simuleaza(nodLivrare.parameters.jsCode, { $json: randLivrare, $env: {}, items: [] });
+  assert(outLivrare[0].json.destinatar === 'cumparator2@example.com' && outLivrare[0].json.nume_client === kit[1].nume_fictiv,
+    'Date Livrare: destinatarul vine din evenimentul Stripe când dosarul nu are e-mail');
+  assert(outLivrare[0].json.suma_plata === PRET_RON && outLivrare[0].json.tva_inclus === true && outLivrare[0].json.factura_emisa_de === 'stripe',
+    'Date Livrare: suma e cea contractată, TVA inclus, factura e a Stripe');
+  const prioritare = await simuleaza(nodLivrare.parameters.jsCode, {
+    $json: { email_cumparator: 'din-dosar@example.com', email_plata: 'de-la-plata@example.com' }, $env: {}, items: []
   });
-  const p = outPayload[0].json.smartbill_payload;
-  assert(p.client.name === kit[1].nume_fictiv && p.client.vatCode === kit[1].cnp && p.price === PRET_RON && p.eInvoice.sendEInvoice === true, 'SmartBill: payload corect din coloanele aplatizate');
+  assert(prioritare[0].json.destinatar === 'din-dosar@example.com',
+    'Date Livrare: e-mailul din dosar are prioritate (dosarul e sursa completată de client)');
+  let faraEmail = '';
+  try {
+    await simuleaza(nodLivrare.parameters.jsCode, { $json: { email_cumparator: '', email_plata: '' }, $env: {}, items: [] });
+  } catch (e) { faraEmail = e.message; }
+  assert(/e-mail/i.test(faraEmail), 'Date Livrare: fără niciun e-mail → eroare explicită, nu un e-mail livrat în gol');
 
   console.log('');
   console.log('Output: ' + OUT);

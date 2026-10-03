@@ -11,9 +11,10 @@
  * ============================================================ */
 'use strict';
 
-/* Prețul vine din SURSĂ (site/config.js): suma încasată în EUR și valoarea
- * contractuală în lei. Niciuna nu e scrisă manual aici. */
-const { PRET_RON, PRET_EUR } = require('../config-autoact.js');
+/* Prețul și Payment Link-ul vin din SURSĂ (site/config.js): suma încasată
+ * e chiar suma contractată (49 lei, TVA inclus), iar link-ul de plată e
+ * cel creat în contul Stripe. Niciuna nu e scrisă manual aici. */
+const { PRET_RON, STRIPE } = require('../config-autoact.js');
 
 /* ---------- Helper: numele valide de parametri n8n ---------- */
 function p(name) { return '=' + name; }
@@ -234,7 +235,7 @@ return [{ json: { ...date, id_tranzactie: $json.id_tranzactie, cnp_valid_tot, cn
     position: [1740, 520],
     parameters: {
       respondWith: 'json',
-      responseBody: '={{ JSON.stringify({ status: "awaiting_payment", suma: ' + PRET_EUR + ', moneda: "EUR", suma_ron: ' + PRET_RON + ', id_tranzactie: $json.id_tranzactie, url_plata: "https://autoact.eu/plata?tr=" + $json.id_tranzactie, mesaj: "Finalizeaza plata pentru a genera documentele." }) }}',
+      responseBody: '={{ (() => { const s = $json.id_tranzactie; const url = new URL(' + JSON.stringify(STRIPE.PAYMENT_LINK) + '); url.searchParams.set("client_reference_id", s); return JSON.stringify({ status: "awaiting_payment", suma: ' + PRET_RON + ', moneda: "RON", suma_ron: ' + PRET_RON + ', tva_inclus: true, id_tranzactie: s, url_plata: url.toString(), mesaj: "Finalizeaza plata pentru a genera documentele." }); })() }}',
       options: { responseCode: 200 }
     }
   },
@@ -384,7 +385,7 @@ nodes.push(
     position: [1660, 540],
     parameters: {
       width: 460, height: 190, color: 6,
-      content: '### Ramura PLATĂ\n*IF Plata* devine true doar când fluxul Netopia (webhook separat) reintră cu `plata_confirmata=true` + `id_tranzactie`. Până atunci clientul primește `url_plata`.\n*Documente ZIP*: MVP emite payload + lista PDF; integrarea Google Docs → PDF → zip-store conform BLUEPRINT.md §2.7. Atașează ZIP-ul nodului Gmail din /home/node/local/.'
+      content: '### Ramura PLATĂ\n*IF Plata* devine true doar când fluxul Stripe (webhook separat) reintră cu `plata_confirmata=true` + `id_tranzactie`. Până atunci clientul primește `url_plata`.\n*Documente ZIP*: MVP emite payload + lista PDF; integrarea Google Docs → PDF → zip-store conform BLUEPRINT.md §2.7. Atașează ZIP-ul nodului Gmail din /home/node/local/.'
     }
   }
 );

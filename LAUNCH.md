@@ -14,13 +14,15 @@
 | Componentă | Stare |
 |---|---|
 | 6 module + BLUEPRINT | ✅ livrate, testate |
-| Workflow pipeline (14 noduri) + plăți (24 noduri) | ✅ generatoare cu auto-validări, JSON importabil |
+| Workflow pipeline (14 noduri) + plăți (22 noduri) | ✅ generatoare cu auto-validări, JSON importabil |
 | Șabloane Google Docs (3 documente, 37 placeholder-e) | ✅ conținut redactat pe disc |
 | Site static + pagină de contact | ✅ generate din `site/*.sablon.html` |
 | Idempotency + GDPR contra PostgreSQL real | ✅ 27/27 pe Docker |
 | NAP (CIF, adresă, telefon) | ⚠️ **PLACEHOLDER** — blochează deploy-ul |
 | Pagini `/termeni` și `/gdpr` | ❌ **nu există** — linkuri moarte în footer |
-| Conturi externe (Netopia, SmartBill, OpenAI, Gemini, Google) | ❌ de creat |
+| Cont Stripe (sandbox) + produs 49 lei + „Managed Payments" | ✅ creat, plăți reale măsurate |
+| Cont Stripe **live** (Go live) | ❌ cere date personale + act de identitate |
+| Conturi externe (OpenAI, Gemini, Google) | ❌ de creat |
 | Git remote + push | ✅ repo public `blogbrasov-debug/autoact`, suita de 14 pași verde în CI |
 | Identitate vizuală Facebook (5 materiale la dimensiunile Meta) | ✅ generate în `brand/png/` |
 
@@ -69,20 +71,25 @@ node site/test-banca-cifre.js     # trebuie să NU mai afișeze avertismentul de
 
 ### Pasul 2 — Conturi externe + secrete
 
+### Pasul 2 — Conturi externe + secrete
+
 | Serviciu | Ce obținem | Unde intră |
 |---|---|---|
 | Oracle Cloud | VM A1 Always Free (**2 OCPU / 12 GB** — limita redusă de Oracle pe 15 iunie 2026) | — |
-| Netopia (MobilPay) | cont merchant + cheie RSA + `orderId` callback | n8n Credentials + `.env` |
-| SmartBill | API user + token + serie factură | n8n Credentials + `.env` |
+| **Stripe** | cont + „Managed Payments" activ + produs 49 lei + Payment Link + endpoint de webhook | `.env` (`STRIPE_WEBHOOK_SECRET`) |
 | OpenAI | cheie API (Vision OCR) | n8n Credentials |
 | Google AI Studio | cheie Gemini | n8n Credentials |
 | Google (Docs + Gmail) | cont, OAuth2, 3 șabloane create din `module-2/sabloane/` | n8n Credentials + `.env` |
 | Cloudflare (DNS + hosting) | `autoact.eu` → Cloudflare Pages (site); `api.autoact.eu` → IP-ul VM-ului | DNS |
 
-⚠️ **Contul Google** e singurul careCer **creare manuală a celor 3 șabloane** — instrucțiunile sunt
+⚠️ **Contul Google** e singurul care cere **creare manuală a celor 3 șabloane** — instrucțiunile sunt
 în `module-2/sabloane/README.md`. Fără ele, nodul „Placeholder-e Docs" nu are ce înlocui.
 
-### Pasul 3 — Infrastructura
+⚠️ **Stripe: Signing secret-ul e obligatoriu.** Se ia din Developers → Webhooks → endpoint
+(Signing secret) și se pune în `.env` ca `STRIPE_WEBHOOK_SECRET`. Fără el, nodul „Verificare
+Semnătură" respinge **corect** orice eveniment — adică niciun document nu se generează.
+`deploy-autoact.sh` verifică explicit dacă e completat și spune care cheie lipsește.
+
 
 ```bash
 cd module-3
@@ -188,25 +195,30 @@ Apoi, în n8n: **⋯ → Import from File** → `module-2/autoact-workflow.json`
 
 ### Pasul 7 — Smoke test (înainte de GO, obligatoriu)
 
-- **Plată reală de 49 RON**, de la zero: introdu pozele, verifică datele, plătește, primește ZIP.
-- Verifică manual: contractul are datele corecte, factura are **CIF-ul din NAP**, VIN-ul e valid,
-  și **nu s-a generat factură duplicată** la retransmitere (retrigger-ează webhook-ul Netopia).
+- **Plată reală de 49 RON**, de la zero: introdu pozele, verifică datele, plătești, primești ZIP.
+- Verifică manual: contractul are datele corecte, VIN-ul e valid, iar **factura vine de la Stripe**
+  cu TVA 8,50 lei și total 49,00 lei (factura noastră NU trebuie să existe — ar fi a doua).
+- Verifică idempotența: retrigger-ează **webhook-ul Stripe** (Stripe Dashboard → Logs → resend)
+  și confirmă că **nu se livrează un al doilea ZIP**.
+- Verifică semnătura: un POST cu `Stripe-Signature` fals trebuie respins cu **HTTP 400**.
 - Verifică job-ul GDPR: după 48h de la livrare, datele sunt epurate.
 - Verifică `curl -I https://autoact.eu` → TLS valid, redirect 80→443.
-
 ---
 
-## 1.bis Decizia fiscală — cum încasăm **fără CUI** (3 oct. 2026)
+ — cum încasăm **fără CUI** + de ce 49 lei (3 oct. 2026)
 
-Procesatorul ales este **Paddle**, în rol de **Merchant of Record**: Paddle este vânzătorul de drept,
-emite documentul către client și remite TVA-ul. Deci **nu e nevoie de CUI ca să încasăm**.
+Procesatorul ales este **Stripe**, în rol de **Merchant of Record** („Managed Payments"):
+Stripe este vânzătorul de drept, emite factura și chitanța cu TVA către client și remite
+TVA-ul. Deci **nu e nevoie de CUI ca să încasăm**.
 
 | Ce am verificat | Rezultat |
 |---|---|
-| Paddle acceptă vânzători din România? | **Da** — singurele excepții sunt țări sancționate, România nu e în listă |
-| Cum plătește Paddle? | **doar transfer bancar (IBAN/BIC)** — Payoneer **nu** e destinație de plată |
-| Ce rol are Payoneer? | nu e procesator de carduri; poate primi de pe platforme și retrage în cont bancar |
-| Procesatori românești (Netopia, SmartBill, Salt)? | cer **CUI** pentru contract de merchant |
+| Stripe acceptă vânzători din România? | **Da** — cont creat și onboardat complet, fără CUI |
+| „Managed Payments" e activ? | **Da** — Stripe preia rolul de vânzător și retine TVA |
+| Produsul e „Eligible for Managed Payments"? | **Da** — prin alegerea codului fiscal `txcd_10000000` (General – Electronically Supplied Services) |
+| Factura ajunge la client? | **Da** — factură + chitanță descărcabile imediat după plată |
+| Cum se plătește vânzătorului? | transfer bancar, la cursul Stripe (nu ne interesează: vânzăm în lei) |
+| Procesatori românești (Netopia, SmartBill, Salt)? | cer **CUI** pentru contract de merchant — de aceea nu sunt folosiți |
 
 **Până la regularizare, banii sunt tot venit declarabil** — procesatorul raportează plățile.
 „Facturăm retroactiv când ne fiscalizăm" este **regularizare**, nu o scurtăcută: dacă ANAF consideră
@@ -215,43 +227,61 @@ că ai desfășurat activitate economică neregistrată, urmează constatare și
 Pragul de regularizare e o singură cifră, în `site/config.js`:
 
 ```
-PLATARI: { PROCESATOR: 'paddle', PRAG_COMENZI_REGULARIZARE: 200 }
+PLATARI: { PROCESATOR: 'stripe', PRAG_COMENZI_REGULARIZARE: 200 }
 ```
 
 `site/test-banca-cifre.js` verifică la fiecare rulare că procesatorul și pragul din config.js
-sunt aceleași cu cele exportate și descrise în acest document — decizia nu se învețeze în tăcere.
+sunt aceleași cu cele exportate și descrise în acest document — decizia nu se învețeze în tăcure.
 
-### Ce trebuie respectat la migrarea workflow-ului (verificat 3 oct. 2026)
+### Prețul: **49 lei, TVA inclus** — măsurat, nu estimat
 
-Două fapte oficiale schimbă designul față de Netopia; au fost verificate **înainte** de a scrie cod:
+Prețul a fost ales **pe baza a două plăți reale în Stripe sandbox** (card de test, facturare
+România), nu pe baza unei cotă de pe site-ul Stripe:
+
+| Varianta | Brut | Tax reținut | Procesare | Conversie valutară | **Net încasat** |
+|---|---|---|---|---|---|
+| 9,16 € (49 lei ÷ curs) | 48,90 lei | −8,49 | −0,98 | **−3,52** | **36,89 lei** |
+| **49,00 lei (aleasă)** | 49,00 lei | −8,50 | −2,54 | **0** | **37,96 lei** |
+
+Cele trei lucruri pe care le câștigăm plățind în lei:
+1. **+1,07 lei/tranzacție** net (37,96 vs 36,89) — exact taxa de conversie care lipsea;
+2. **cursul de schimb devine irelevant** pentru marjă — prețul încasat nu mai depinde de o
+   cotă pe care nu o controlem și nu o putem promite clientului;
+3. **prețul afișat = prețul contractat = prețul încasat**, în aceeași monedă: nu mai există
+   o față a prețului în altă valută care trebuie ținută sincronizată cu prima.
+
+Factura afișată la checkout: TVA 8,50 lei, total 49,00 lei — prețul e cu TVA inclus
+(`tax_behavior` pe produs), deci clientul nu adaugă nimic la plată.
+
+⚠️ **Limită explicită:** aceste cifre sunt din **SANDBOX**, unde taxele sunt simulate.
+Comisionul „Managed Payments" (+3,5%/tranzacție) **nu apare** în niciun breakdown sandbox,
+deci **netul real după Go live trebuie reconfirmat** printr-o plată reală. Estimarea
+conservatoare cu comision inclus e ≈ 36,25 lei/tranzacție — marja rămâne confortabil pozitivă.
+
+### Cum arată decizia în cod (verificat de teste, nu doar documentată)
 
 | Fapt verificat | Consecință în cod |
 |---|---|
-| Paddle plătește vânzătorul **doar în USD, EUR, GBP, AUD, CAD** | suma și moneda se citesc din eveniment, **nu** se compară cu 49 RON |
-| Webhook-ul vine cu antetul **`Paddle-Signature`** = HMAC peste **octeții exacti** ai body-ului | verificarea se face pe body-ul brut, nu pe obiectul parsat |
-
-⚠️ **Prețul afișat clienților (49 RON) nu mai e plătibil în RON prin Paddle.** Paddle face
-conversia la moneda de plată a clientului și el rămâne cu expunerea FX. La 49 RON, orice
-diferență de curs împarte marja între tine și Paddle — la un volum mic, câștigul e neglijabil
-dar nici pierderea nu e. **Decizie de produs, nu de cod:** afișezi „49 RON" și încasezi în
-EUR/USD, sau cobori prețul de afișare. Nu am ales eu în locul tău.
-
-**Atenție la o capcană cunoscută:** există un advisory public (GHSA-mjgf-xj26-9qf9, mai 2026)
-despre comparație HMAC **neconstantă în timp** la webhook-urile Paddle Billing — o implementare
-naivă în n8n poate lăsa o urmă de oracle. De aceea comparația trebuie scrisă cu `timingSafeEqual`.
+| Webhook-ul vine cu antetul **`Stripe-Signature`** = HMAC-SHA256 peste **octeții exacti** ai body-ului | nodul Webhook are **RAW BODY** pornit; verificarea se face pe Buffer, nu pe obiectul parsat |
+| Comparația de semnătură trebuie să fie constantă în timp | `crypto.timingSafeEqual`, niciodată `!==` pe șiruri |
+| Un body capturat poate fi reluat oricând | antetele mai vechi de 300 s sunt respinse |
+| Suma vine în **unități mici** (`amount_total: 4900`) și în notația minorității (`ron`) | normalizare într-un singur loc: `suma = centi / 100`, `moneda = 'RON'` |
+| Legătura plată ↔ dosar | `client_reference_id` pus de Payment Link = `id_tranzactie` |
+| Idempotența trebuie să fie pe eveniment repetat | `plati_procesate.order_id` unic; retransmisia e oprită înainte de generare |
 
 ⚠️ **Cifra 200 este o decizie de afacere, nu una de lege.** Pragul legal depinde de regimul
 aplicabil și trebuie confirmat cu un contabil înainte de a te baza pe el; o oră de consultanță
 costă 100–200 lei și elimină cea mai mare incertitudine din tot proiectul.
 
-**Nealiniat încă (spunem limpede):** `module-5/autoact-workflow-plati.json` este încă construit
-pentru Netopia + SmartBill. Migrarea la Paddle (checkout + webhook, fără factură proprie) e
-următoarea bucată de lucru și **nu e începută** — nu se face pe jumătate, fiindcă workflow-ul
-are ~30 de auto-validări legate de criptografia Netopia.
+**Migrare încheiată:** `module-5/autoact-workflow-plati.json` conține 22 noduri
+(18 pipeline + 4 sticky) pe fluxul Stripe. Criptografia Netopia (RSA + AES-CBC) și nodurile
+SmartBill au fost eliminate; ~30 de auto-validări au fost rescrise, dintre care 9 prind
+**sabotaje reale** ale semnăturii (secret greșit, corp modificat, antet vechi, antet absent,
+secret neconfigurat, body parsat, sumă greșită, plată fără tranzacție).
 
 ---
 
-## 2. Conținut legal — **nu se poate genera din cod**
+ — **nu se poate genera din cod**
 
 `/termeni` și `/gdpr` sunt linkate în footer dar **nu au pagină**. Textul lor e o decizie
 juridică, nu una tehnică — și nu poate fi inventat de un agent.
@@ -286,8 +316,8 @@ nu s-ar fi plătit, dar serverul ar fi murit după prima întreținere.
 `verifica-cost-0.js` (pasul 12 din runner) verifică limita la fiecare rulare.
 
 **c) „Cost fix 0 RON" ≠ „cost total 0 RON".** Costurile care cresc cu volumul:
-OpenAI Vision OCR ≈ 0,13 RON/comandă (5 imagini), comision Netopia per
-tranzacție, cotă SmartBill per document. La 49 RON/comandă marja rămâne
+OpenAI Vision OCR ≈ 0,13 RON/comandă (5 imagini), comision Stripe
+(„Managed Payments" ≈ 3,5% + procesare) per tranzacție. La 49 RON/comandă marja rămâne
 confortabil pozitivă — dar onest e să știi că există. Cifrele se verifică
 executând `node verifica-cost-0.js`.
 
@@ -322,10 +352,12 @@ un card de plată legat la cont — Oracle nu notifică înainte de a taxa.
 |---|---|---|---|
 | 1 | NAP placeholder (`RO00000000`) | Fondator | **deploy-ul se oprește** |
 | 2 | Pagini `/termeni` + `/gdpr` lipsă | Fondator + juridic | lansare publică |
-| 3 | Conturi Netopia/SmartBill/Google | Fondator | pașii 2, 6, 7 |
+| 3 | Conturi Google (Docs + Gmail) | Fondator | pașii 2, 6, 7 |
 | 4 | 3 șabloane Google Docs create | Fondator | pasul 6 |
-| 5 | Regim TVA confirmat | Contabil | prima factură |
-| 6 | Domeniu `autoact.eu` înregistrat (≈1,59 €) | Fondator | pasul 3 (fără domeniu, Caddy nu poate emite TLS) |
+| 5 | Cont Stripe **live** (date personale + act de identitate) | Fondator | pasul 7 (doar sandbox merge acum) |
+| 5.bis | `STRIPE_WEBHOOK_SECRET` în `.env` | Fondator | **nicio plată nu generează documente** |
+| 5.ter | Regim TVA confirmat cu contabilul | Contabil | înainte de 200 de comenzi |
+ `autoact.eu` înregistrat (≈1,59 €) | Fondator | pasul 3 (fără domeniu, Caddy nu poate emite TLS) |
 | 7 | DNS `autoact.eu` → Pages, `api.autoact.eu` → VM | Fondator | pasul 3 (Caddy emite TLS doar cu DNS valid) |
 | 8 | `.env` de pe server salvat local | Fondator | **pierderea credential-urilor n8n** |
 | 9 | Cloudflare Pages: proiect creat, site publicat | Fondator | pasul 5 (site-ul rămâne local, nevizibil) |
@@ -340,7 +372,7 @@ un card de plată legat la cont — Oracle nu notifică înainte de a taxa.
 | Workflow n8n stricat | Importă din nou fișierul `.json` din repo |
 | Cod n8n stricat | `sudo docker compose exec n8n n8n import:workflow --separate --input=backup.json` |
 | Secret pierdut | **irecuperabil** — creează alt cont n8n și reatribuie credential-urile |
-| Factură duplicată | `plati_procesate` are `order_id` unic; interogă `SELECT * FROM plati_procesate ORDER BY procesat_la DESC` |
+| Pachet livrat de două ori | `plati_procesate` are `order_id` unic; interogă `SELECT * FROM plati_procesate ORDER BY procesat_la DESC` |
 | Stack jos | `sudo docker compose ps` → `logs -f n8n` → `restart n8n` |
 
 **Backup-uri obligatorii (totul gratuit):**

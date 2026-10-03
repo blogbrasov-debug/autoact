@@ -18,15 +18,14 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { PRET_RON, PRET_EUR, PRET_EUR_AFISAT, NAP, RETENTION_H } = require('../config-autoact.js');
+const { PRET_RON, PRET_AFISAT, NAP, RETENTION_H } = require('../config-autoact.js');
 
 const citeste = (f) => fs.readFileSync(path.join(__dirname, f), 'utf8');
 
 /* ---------- 1. Tokenuri: singura punte config.js → pagini ---------- */
 const TOKENURI = {
   PRET_RON: String(PRET_RON),
-  PRET_EUR: String(PRET_EUR),
-  PRET_EUR_AFISAT,
+  PRET_AFISAT,
   CIF: NAP.CIF,
   REG_COM: NAP.REG_COM,
   ADRESA: NAP.ADRESA,
@@ -85,7 +84,7 @@ fs.writeFileSync(OUT, html);
 console.log('OK → site/demo-standalone.html (' + Math.round(html.length / 1024) + ' KB)');
 
 /* Coerență: prețul afișat trebuie să fie cel din config.js, peste tot */
-const aparitii = html.split(PRET_EUR_AFISAT).length - 1;
+const aparitii = html.split(PRET_AFISAT).length - 1;
 if (aparitii < 3) {
-  throw new Error('index.html: prețul afișat „' + PRET_EUR_AFISAT + '" apare de ' + aparitii + ' ori, așteptam minimum 3');
+  throw new Error('index.html: prețul afișat „' + PRET_AFISAT + '" apare de ' + aparitii + ' ori, așteptam minimum 3');
 }

@@ -39,8 +39,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { PRET_RON, PRET_EUR, PRET_EUR_AFISAT, NAP, PLACEHOLDER_NAP, RETENTION_H, EXCEPTII_CIFRE, cifraControlCif,
-        PROCESATOR_PLATI, PRAG_REGULARIZARE } = require('../config-autoact.js');
+const { PRET_RON, PRET_AFISAT, NAP, PLACEHOLDER_NAP, RETENTION_H, EXCEPTII_CIFRE, cifraControlCif,
+        PROCESATOR_PLATI, PRAG_REGULARIZARE, STRIPE } = require('../config-autoact.js');
 
 const rad = (p) => path.join(__dirname, p);
 const configJs = fs.readFileSync(rad('config.js'), 'utf8');
@@ -59,8 +59,7 @@ function ok(cond, msg) {
 
 /* ---------- 1. Ce e permis: din cod ---------- */
 const COD = {
-  [PRET_RON]: 'valoarea contractuală în lei, din site/config.js (singura sursă)',
-  [PRET_EUR]: 'suma încasată în EUR, din site/config.js (singura sursă)'
+  [PRET_RON]: 'prețul unic, în lei cu TVA inclus, din site/config.js (singura sursă)'
 };
 
 /* ---------- 2. Ce e permis: excepții declarate ---------- */
@@ -177,9 +176,9 @@ for (const p of SABLOANE) {
   verifica(s, 'site/' + p);
 }
 const sablon = fs.readFileSync(rad('index.sablon.html'), 'utf8');
-const tokenuri = (sablon.match(/\{\{PRET_(EUR|EUR_AFISAT)\}\}/g) || []).length;
+const tokenuri = (sablon.match(/\{\{PRET_(RON|AFISAT)\}\}/g) || []).length;
 ok(tokenuri === 5, 'site/index.sablon.html: 5 tokenuri de preț (html data-pret, meta, hero, buton, JSON-LD) — găsite: ' + tokenuri);
-ok(!sablon.includes('{{PRET_RON}}'), 'site/index.sablon.html: prețul afișat vine din PRET_EUR, nu din valoarea în lei');
+ok(!sablon.includes('{{PRET_EUR'), 'site/index.sablon.html: niciun token în euro n-a rămas (prețul se încasează în lei)');
 const tokenuriNap = sablon.match(/\{\{(CIF|REG_COM|ADRESA|TELEFON|EMAIL|DENUMIRE|SITE_URL)\}\}/g) || [];
 const cheiNap = [...new Set(tokenuriNap.map((t) => t.slice(2, -2)))].sort();
 const asteptate = ['ADRESA', 'CIF', 'DENUMIRE', 'EMAIL', 'REG_COM', 'SITE_URL', 'TELEFON'];
@@ -235,7 +234,7 @@ ok(org && org.vatID === NAP.CIF, 'JSON-LD: Organization.vatID = CIF-ul din confi
 ok(org && org.email === NAP.EMAIL && org.telephone === NAP.TELEFON, 'JSON-LD: Organization poate contactul din config.js');
 ok(org && org.address && org.address.streetAddress === NAP.ADRESA && org.address.addressCountry === 'RO', 'JSON-LD: adresa poștală NAP cu addressCountry RO');
 ok(org && org.contactPoint && org.contactPoint.contactType && org.contactPoint.availableLanguage === 'ro', 'JSON-LD: contactPoint cu tip și limbă română');
-ok(prod && prod.offers.price === String(PRET_EUR) && prod.offers.priceCurrency === 'EUR', 'JSON-LD: Product.offers.price = ' + PRET_EUR + ' EUR (din config.js)');
+ok(prod && prod.offers.price === String(PRET_RON) && prod.offers.priceCurrency === 'RON', 'JSON-LD: Product.offers.price = ' + PRET_RON + ' RON (din config.js)');
 ok(prod && prod.brand && prod.brand['@id'] === org['@id'], 'JSON-LD: Product.brand referă Organization-ul (nu o copie a numelui)');
 ok(web && web.publisher && web.publisher['@id'] === org['@id'], 'JSON-LD: WebSite.publisher referă Organization-ul');
 ok(prod && prod.areaServed && prod.areaServed.name === 'România', 'JSON-LD: Product.areaServed = România');
@@ -251,19 +250,9 @@ ok(sqlPurge.includes("INTERVAL '" + RETENTION_H + " hours'"),
   'retenția promisesă în pagină (' + RETENTION_H + 'h) e cea aplicată de module-4/gdpr-purge.sql');
 ok(contactHtml.includes(RETENTION_H + ' de ore'), 'site/contact.html: menționează retenția de ' + RETENTION_H + ' ore');
 
-/* Factura SmartBill preia CIF-ul din .env, iar deploy-ul îl scrie din
- * config.js — altfel pagina ar afișa un CIF și factura altul. */
-const deploy = fs.readFileSync(path.join(__dirname, '..', 'module-3', 'deploy-autoact.sh'), 'utf8');
-ok(
-  deploy.includes('SMARTBILL_VAT_CODE=${AUTOACT_CIF}') && deploy.includes('config-autoact.js'),
-  'deploy-autoact.sh scrie SMARTBILL_VAT_CODE din config.js (factura are același CIF ca NAP-ul)'
-);
-const atribuiriCif = deploy.split(String.fromCharCode(10)).filter((l) => l.includes('SMARTBILL_VAT_CODE='));
-const cifScriseManual = atribuiriCif.filter((a) => !a.includes('${AUTOACT_CIF}'));
-ok(cifScriseManual.length === 0, 'deploy-autoact.sh nu conține un CIF scris manual' + (cifScriseManual.length ? ' — ' + cifScriseManual.join(' | ') : ''));
-
 /* Deploy-ul trebuie să OPREASCĂ înainte de a atinge serverul dacă NAP-ul
- * e placeholder — altfel .env rămâne cu CIF fictiv și nu se mai repară. */
+ * e placeholder — altfel documentele oficiale pornesc cu CIF fictiv. */
+const deploy = fs.readFileSync(path.join(__dirname, '..', 'module-3', 'deploy-autoact.sh'), 'utf8');
 ok(
   deploy.includes('ALLOW_PLACEHOLDER_NAP') && deploy.includes('PLACEHOLDER_NAP'),
   'deploy-autoact.sh are blocaj pentru NAP placeholder (nu lasă .env cu CIF fictiv)'
@@ -271,10 +260,18 @@ ok(
 const pozGuard = deploy.indexOf('PLACEHOLDER_NAP');
 const pozPrimaSsh = deploy.indexOf('ssh "$SSH_TARGET"');
 ok(pozGuard > 0 && pozGuard < pozPrimaSsh, 'blocajul NAP e evaluat înainte de prima conexiune SSH');
-ok(
-  deploy.includes("sed -i 's|^SMARTBILL_VAT_CODE="),
-  'deploy-autoact.sh reconciliază CIF-ul într-un .env existent (un NAP corectat ulterior ajunge la factură)'
-);
+
+/* Cheile Stripe nu pot fi generate — se copiază din contul Stripe. De aceea
+ * deploy-ul le declară GOALE și apoi VERIFICĂ dacă au fost completate: un
+ * secret lipsit e altfel un stack „cu succes" care pierde prima plată. */
+ok(deploy.includes('STRIPE_WEBHOOK_SECRET=') && deploy.includes('STRIPE_WEBHOOK_SECRET='),
+  'deploy-autoact.sh scrie STRIPE_WEBHOOK_SECRET în .env');
+ok(deploy.includes(String.fromCharCode(92) + "${cheie}=."),
+  'deploy-autoact.sh VERIFICă dacă cheile Stripe/Google sunt completate într-un .env existent');
+ok(!/NETOPIA|SMARTBILL/.test(deploy),
+  'deploy-autoact.sh nu mai scrie chei Netopia/SmartBill (procesatorul e Stripe)');
+ok(!/NETOPIA|SMARTBILL/.test(fs.readFileSync(path.join(__dirname, '..', 'module-3', 'docker-compose.yml'), 'utf8')),
+  'docker-compose.yml nu mai expune chei Netopia/SmartBill în containerul n8n');
 
 /* ============ 8. LAUNCH.md nu îmbătrânește ============ */
 /* Cifrele din planul de lansare (noduri, placeholder-e, pași) trebuie
@@ -295,18 +292,31 @@ ok(launch.includes(RETENTION_H + 'h'), 'LAUNCH.md: retenția GDPR menționată e
  * Dacă se schimbă procesatorul sau pragul într-un loc și nu în celălalt,
  * planul de lansare și codul ar povesti lucruri diferite. */
 ok(
-  PROCESATOR_PLATI === 'paddle' && configJs.includes("PROCESATOR: 'paddle'"),
-  'decizia fiscală: procesatorul e Paddle (Merchant of Record) în config.js („' + PROCESATOR_PLATI + '")'
+  PROCESATOR_PLATI === 'stripe' && configJs.includes("PROCESATOR: 'stripe'"),
+  'decizia fiscală: procesatorul e Stripe (Merchant of Record) în config.js („' + PROCESATOR_PLATI + '”)'
 );
+/* ID-urile Stripe sunt publice prin natura lor, dar nu au voie să fie copiate
+ * în workflow sau șablon: o migrare de cont Stripe trebuie să fie o singură
+ * editare, în config.js — altfel jumătate din sistem indică contul vechi. */
+const wfPlatiSrc = fs.readFileSync(path.join(__dirname, '..', 'module-5', 'autoact-workflow-plati.json'), 'utf8');
+for (const [nume, valoare] of Object.entries(STRIPE)) {
+  ok(!wfPlatiSrc.includes(valoare),
+    'STRIPE.' + nume + ': ID-ul stă în config.js, nu e copiat în workflow-ul de plăți',
+    'valoarea „' + valoare + '” apare și în codul generat');
+}
 ok(
   Number.isInteger(PRAG_REGULARIZARE) && PRAG_REGULARIZARE > 0
     && configJs.includes('PRAG_COMENZI_REGULARIZARE: ' + PRAG_REGULARIZARE),
   'decizia fiscală: pragul de regularizare (' + PRAG_REGULARIZARE + ' comenzi) e citibil din config.js'
 );
 ok(
-  launch.includes('Paddle') && launch.includes('Merchant of Record'),
-  'LAUNCH.md: decizia Paddle (Merchant of Record) e documentată, nu doar cod'
+  launch.includes('Stripe') && launch.includes('Merchant of Record'),
+  'LAUNCH.md: decizia Stripe (Merchant of Record) e documentată, nu doar cod'
 );
+/* Prețul unic, TVA inclus, trebuie să fie spus în plan și cu măsurătoarele
+ * care l-au ales — altă forma, documentul rămâne o decizie nemotivată. */
+ok(launch.includes(PRET_AFISAT) && /TVA inclus/i.test(launch),
+  'LAUNCH.md: prețul afișat (' + PRET_AFISAT + ', TVA inclus) e documentat');
 ok(launch.includes('RO00000000') === PLACEHOLDER_NAP, 'LAUNCH.md: statusul NAP-ului (placeholder/necompletat) corespunde lui config.js');
 for (const f of ['site/config.js', 'config-autoact.js', 'module-3/deploy-autoact.sh', 'module-2/sabloane/README.md', 'module-4/gdpr-purge.sql', 'module-5/plati-schema.sql']) {
   const citat = launch.includes('`' + f + '`') || launch.includes(f);
@@ -325,15 +335,16 @@ if (PLACEHOLDER_NAP) {
 
 /* ============ 5. Coerența prețului: HTML = config.js ============ */
 const metaDesc = indexHtml.match(/<meta[^>]*name="description"[^>]*content="([^"]*)"/)[1];
-ok(metaDesc.includes(PRET_EUR_AFISAT), 'meta description conține suma încasată din config.js (' + PRET_EUR_AFISAT + ')');
-ok(!/plătești\s+\d+\s+RON/.test(metaDesc), 'meta description nu mai promite sumă în lei: clientul plătește în EUR');
+ok(metaDesc.includes(PRET_AFISAT), 'meta description conține suma din config.js (' + PRET_AFISAT + ')');
+ok(/TVA inclus/i.test(metaDesc), 'meta description precizează „TVA inclus” — prețul nu adaugă nimic la plată');
+ok(!/€/.test(metaDesc + indexHtml.split('</head>')[0]), 'textul public nu mai promite sumă în euro');
 const buton = indexHtml.match(/id="btn-plata"[^>]*>([^<]*)</)[1];
-ok(buton.includes(PRET_EUR_AFISAT), 'butonul de plată conține suma încasată din config.js — text: „' + buton.trim() + '”');
-ok(!indexHtml.includes('{{PRET_EUR') && !indexHtml.includes('{{PRET_RON}}'), 'index.html generat: niciun token neînlocuit');
+ok(buton.includes(PRET_AFISAT), 'butonul de plată conține suma din config.js — text: „' + buton.trim() + '”');
+ok(!indexHtml.includes('{{PRET_'), 'index.html generat: niciun token neînlocuit');
 ok(!/<!--\s*SABLON/.test(indexHtml) && !/SABLON\s+—\s+nu edita/.test(indexHtml), 'index.html generat: nicio notă de build din șablon nu ajunge în pagina publică');
 ok(
-  (indexHtml.match(/<html lang="ro" data-pret="([\d.]+)">/) || [])[1] === String(PRET_EUR),
-  'index.html: <html data-pret> = ' + PRET_EUR + ' EUR (fallback-ul din app.js vine tot din config.js)'
+  (indexHtml.match(/<html lang="ro" data-pret="(\d+)">/) || [])[1] === String(PRET_RON),
+  'index.html: <html data-pret> = ' + PRET_RON + ' RON (fallback-ul din app.js vine tot din config.js)'
 );
 
 /* Placeholder-ul din atribut nu e „text public”, deci guard-ul de cifre
@@ -349,12 +360,12 @@ console.log('— test de mutație (verifică că guard-ul nu e decorativ) —');
 /* Fiecare probă este o mutație REALĂ aplicată textului curent:
  * cineva editează index.html și scrie o cifră greșit. */
 const probe = [
-  ['butonul de plată arată 39 € în loc de ' + PRET_EUR_AFISAT,
-    (h) => h.replace('PLĂTEȘTE ' + PRET_EUR_AFISAT, 'PLĂTEȘTE 39,00 €')],
+  ['butonul de plată arată 39 lei în loc de ' + PRET_AFISAT,
+    (h) => h.replace('PLĂTEȘTE ' + PRET_AFISAT, 'PLĂTEȘTE 39 lei')],
   ['JSON-LD anunță prețul 39 (Google indexează exact asta)',
-    (h) => h.replace('"price": "' + PRET_EUR + '"', '"price": "39"')],
-  ['meta description promite 59 €',
-    (h) => h.replace('plătești ' + PRET_EUR_AFISAT + ', primești', 'plătești 59 €, primești')],
+    (h) => h.replace('"price": "' + PRET_RON + '"', '"price": "39"')],
+  ['meta description promite 59 lei',
+    (h) => h.replace('plătești ' + PRET_AFISAT, 'plătești 59 lei')],
   ['apare o sumă nouă în pagină (129)',
     (h) => h.replace('~60 de secunde', '~60 de secunde (pachetul costă 129 RON)')],
   ['promisiunea de timp din buton devine 90 de secunde',
@@ -390,6 +401,10 @@ ok(problemeNap(indexHtml).length === 0, 'fără false-positive: NAP-ul real din 
 ok(
   cifreNejustificate(textPublic(indexHtml)).length === 0,
   'fără false-positive pe excepțiile declarate (9500, 24, 60, 49, ani, numerotare)'
+);
+ok(
+  !/€/.test(textPublic(indexHtml)),
+  'textul public nu mai conține simbolul euro (prețul se încasează în lei)'
 );
 ok(
   cifreNejustificate(textPublic(indexHtml), { mascheaza: false }).length > 0,

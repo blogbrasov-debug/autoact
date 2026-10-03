@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="ro" data-pret="9.16">
+<html lang="ro" data-pret="49">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AutoAct — Acte transcriere auto în 60 de secunde</title>
-  <meta name="description" content="Încarci pozele actelor, sistemul completează automat contractul, cererea DRPCIV și declarațiile fiscale. Verifici datele, plătești 9,16 €, primești ZIP-ul instant.">
+  <meta name="description" content="Încarci pozele actelor, sistemul completează automat contractul, cererea DRPCIV și declarațiile fiscale. Verifici datele, plătești 49 lei cu TVA inclus, primești ZIP-ul instant.">
   <style>
 /* ============================================================
  * AutoAct | site | styles.css — temă completă, fără dependențe
@@ -226,7 +226,7 @@ details p { margin: 8px 0 0; color: var(--text-slabit); }
 <body>
   <header class="hero">
     <h1>Actele pentru transcriere auto, gata în 60 de secunde</h1>
-    <p class="hero-sub">Încarci pozele actelor · sistemul completează automat contractul, cererea DRPCIV și declarațiile fiscale · verifici datele · plătești <strong id="hero-pret">9,16 €</strong> · primești ZIP-ul instant.</p>
+    <p class="hero-sub">Încarci pozele actelor · sistemul completează automat contractul, cererea DRPCIV și declarațiile fiscale · verifici datele · plătești <strong id="hero-pret">49 lei</strong> (TVA inclus) · primești ZIP-ul instant.</p>
   </header>
 
   <main>
@@ -351,8 +351,8 @@ details p { margin: 8px 0 0; color: var(--text-slabit); }
         </label>
       </div>
 
-      <button type="button" id="btn-plata" class="btn btn-plata" disabled>PLĂTEȘTE 9,16 €</button>
-      <p class="hint centrat">Plată securizată Netopia 3-D Secure · primești ZIP-ul + factura pe e-mail în ~60 de secunde</p>
+      <button type="button" id="btn-plata" class="btn btn-plata" disabled>PLĂTEȘTE 49 lei</button>
+      <p class="hint centrat">Plată securizată Stripe · factură fiscală cu TVA inclus · primești ZIP-ul pe e-mail în ~60 de secunde</p>
     </section>
   </main>
 
@@ -379,35 +379,54 @@ details p { margin: 8px 0 0; color: var(--text-slabit); }
  * ⚠ ATENȚIE LA DEPLOY: valorile NAP de mai jos sunt PLACEHOLDER.
  * CIF-ul e validat structural de config-autoact.js (cifra de control),
  * dar placeholder-ul NU e o firmă reală — înlocuiește-le înainte de
- * lansare. Aceleași valori trebuie puse și în .env pe server:
- * SMARTBILL_VAT_CODE=<NAP.CIF>, altfel factura iese cu alt CIF.
+ * lansare. Aceleași valori trebuie puse și în contul Stripe (Settings →
+ * Business → Tax code) și în .env pe server:
+ * STRIPE_WEBHOOK_SECRET=<whsec_…>, altfel webhook-ul nu poate fi
+ * verificat și niciun document nu se generează.
  */
 window.AUTOACT_CONFIG = {
   WEBHOOK_URL: '',
-  /* Prețul are două fețe, dintr-o singură decizie:
- *   PRET_RON — valoarea contractuală, în lei, cea care se scrie în
- *              documentele românești (nu se schimbă: e prețul promises).
- *   PRET_EUR — suma efectiv încasată, în euro, prin Paddle.
- * Calculul este INVERS: 49 RON ÷ 5,3488 RON/EUR (curs ECB, 2 oct. 2026)
- * = 9,1609 EUR. Clientul plătește 9,16 € la cursul Paddle; contractul
- * consemnează 49 lei. config-autoact.js verifică la fiecare rulare că
- * cele două fețe sunt compatibile — altfel prețul ar plăti dublu. */
-PRET_RON: 49,
-PRET_EUR: 9.16,
 
-  /* Decizie fiscală (3 oct. 2026): procesatorul este **Paddle**, în rol de
-   * „Merchant of Record" — Paddle este vânzătorul de drept, emite documentul
-   * către client și remite TVA-ul, deci NU e nevoie de CUI ca să încasăm.
-   * Verificat: Paddle acceptă vânzători din România; plătește prin IBAN/BIC.
+  /* Prețul are O SINGURĂ față: 49 lei, TVA inclus.
+ * Clientul plătește și contractul consemnează aceeași sumă, în aceeași
+ * monedă — deci nu există curs de conversie, risc de variație și nici
+ * nevoie ca suma încasată să fie verificată în două locuri.
+ * Măsurătorile reale (Stripe sandbox, card de test, facturare România):
+ *   49,00 lei brut → tax reținut −8,50 · procesare −2,54 → net 37,96 lei
+ *   (varianta 9,16 € costa 36,89 lei: taxa de conversie de 3,52 lei nu
+ *    exista în niciodată una dintre cele două cifre din sandbox)
+ * ⚠ Netul de mai sus e din SANDBOX: comisionul „Managed Payments"
+ * (+3,5%/tranzacție) nu apare în simulare. De reconfirmat după Go live. */
+  PRET_RON: 49,
+
+  /* Decizie fiscală (3 oct. 2026): procesatorul este **Stripe**, cu
+   * „Managed Payments" — Stripe este vânzătorul de drept (Merchant of
+   * Record), emite factura și chitanța către client și reține TVA, deci
+   * NU e nevoie de CUI ca să încasăm. Produsul are tax_behavior inclus
+   * (preț cu TVA), iar codul fiscal de mai jos îl face „Eligible".
    *
    * Până la regularizare, banii sunt tot venit declarabil — procesatorul îi
    * raportează. PRAG_COMENZI_REGULARIZARE e comanda la care te oprești și
    * te înregistrezi (CUI/PFA). Singurul loc unde se schimbă cifra asta.
    */
   PLATARI: {
-    PROCESATOR: 'paddle',
+    PROCESATOR: 'stripe',
     PRAG_COMENZI_REGULARIZARE: 200
   },
+
+  /* Identificatorii din contul Stripe. ID-urile nu sunt secrete (Payment
+   * Link-ul ajunge oricum în payload-ul trimis clientului), dar nici ele
+   * nu se scriu cu gura în workflow-uri sau șabloane: config-autoact.js
+   * le citește aici și le generează acolo unde trebuie.
+   * La migrarea pe cont live se schimbă DOAR acest bloc. */
+  STRIPE: {
+    PRODUS_ID: 'prod_VNHNWQzMXG49vc',   // „Pachet acte auto — vânzare auto (contract + cerere DRPCIV)"
+    PRET_ID: 'price_1UMWpDPhXnPwCaLh5VcKOavY',   // 49.00 RON, one-off, TVA inclus
+    PAYMENT_LINK: 'https://buy.stripe.com/test_6oU8wR7L91QodQ97ap4ZG01',
+    COD_FISCAL: 'txcd_10000000',       // General — Electronically Supplied Services
+    WEBHOOK_URL_STRIPE: 'https://api.autoact.eu/webhook/stripe'
+  },
+
   NAP: {
     DENUMIRE: 'AutoAct',
     CIF: 'RO00000000',          // ← înlocuiește (placeholder)
@@ -555,9 +574,10 @@ window.AUTOACT_DEMO = {
 (function () {
   /* config.js e sursa reală a prețului; fallback-ul e doar pentru cazul
    * în care config.js nu se încarcă (nu mai e o a doua cifră de întreținut). */
-  const cfg = window.AUTOACT_CONFIG || { WEBHOOK_URL: '', PRET_EUR: Number(document.documentElement.dataset.pret) };
-  /* Suma încasată e în EUR; valoarea contractuală în lei o ține backend-ul. */
-  const PRET_AFISAT = (Number(cfg.PRET_EUR).toFixed(2).replace('.', ',') + ' €');
+  const cfg = window.AUTOACT_CONFIG || { WEBHOOK_URL: '', PRET_RON: Number(document.documentElement.dataset.pret) };
+  /* Prețul are o singură față: 49 lei, TVA inclus — suma contractată și
+   * suma încasată sunt identice, deci nu există conversie de valută. */
+  const PRET_AFISAT = Number(cfg.PRET_RON) + ' lei';
   const V = window.AUTOACT_VALIDARE;
 
   const $ = (sel) => document.querySelector(sel);
@@ -883,12 +903,13 @@ window.AUTOACT_DEMO = {
   $('#acord-client').addEventListener('change', actualizeazaTot);
 
   $('#btn-plata').addEventListener('click', async () => {
-    if (esteDemo) { alert('DEMO: aici s-ar deschide pagina de plată Paddle pentru ' + PRET_AFISAT + '.'); return; }
+    if (esteDemo) { alert('DEMO: aici s-ar deschide pagina de plată Stripe pentru ' + PRET_AFISAT + ' (TVA inclus).'); return; }
     const payload = {
       id_tranzactie: raspunsCurent.id_tranzactie || null,
       acord_client: true,
       date_corectate: Object.fromEntries(Object.entries(stare).map(([c, m]) => [c, m.val])),
-      suma: cfg.PRET_EUR
+      suma: cfg.PRET_RON,
+      moneda: 'RON'
     };
     const btn = $('#btn-plata');
     btn.disabled = true; btn.textContent = 'Se inițiază plata…';
@@ -955,14 +976,14 @@ window.AUTOACT_DEMO = {
         "@type": "Product",
         "@id": "https://autoact.eu#pachet",
         "name": "Pachet acte transcriere auto — AutoAct",
-        "description": "Contract vânzare-cumpărare + cerere DRPCIV + declarații fiscale, generate automat din pozele actelor și livrate în PDF pe e-mail.",
+        "description": "Contract vânzare-cumpărare + cerere DRPCIV + declarații fiscale, generate automat din pozele actelor și livrate în PDF pe e-mail. Preț cu TVA inclus.",
         "brand": { "@id": "https://autoact.eu#organizatie" },
         "inLanguage": "ro-RO",
         "areaServed": { "@type": "Country", "name": "România" },
         "offers": {
           "@type": "Offer",
-          "price": "9.16",
-          "priceCurrency": "EUR",
+          "price": "49",
+          "priceCurrency": "RON",
           "availability": "https://schema.org/InStock",
           "url": "https://autoact.eu"
         }

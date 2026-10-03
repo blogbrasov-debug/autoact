@@ -113,10 +113,22 @@ const MUTATII = [
     tipar: /allowlist|neaprobată/
   },
   {
-    nume: 'secret Netopia scris ca literal în shell',
+    nume: 'secret Stripe scris ca literal în shell',
     fisier: 'module-3/deploy-autoact.sh',
-    aplica: (t) => t.replace("printf 'NETOPIA_RSA_PRIVATE_KEY=", "printf 'NETOPIA_RSA_PRIVATE_KEY=MIIBOgIBAAJBAK7x9Qm2Lp"),
+    aplica: (t) => t.replace("printf 'STRIPE_WEBHOOK_SECRET=", "printf 'STRIPE_WEBHOOK_SECRET=whsec_0123456789abcdefRealSecret"),
     tipar: /literal/
+  },
+  {
+    nume: 'cheia Stripe nu mai ajunge în containerul n8n',
+    fisier: 'module-3/docker-compose.yml',
+    aplica: (t) => t.replace('- STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}', '# cheie eliminată'),
+    tipar: /STRIPE_WEBHOOK_SECRET/
+  },
+  {
+    nume: 'revenirea la o cheie de facturare proprie (factură dublă)',
+    fisier: 'module-3/docker-compose.yml',
+    aplica: (t) => t.replace('      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}', '      - SMARTBILL_VAT_CODE=${SMARTBILL_VAT_CODE}'),
+    tipar: /Netopia\/SmartBill/
   },
   {
     nume: 'parolă PostgreSQL copiată manual în loc de generată',

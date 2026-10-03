@@ -4,6 +4,8 @@
  * PostgreSQL REAL (container docker efemer, postgres:16-alpine —
  * aceeași imagine ca în producție, Modulul 3).
  *
+ * order_id vine din evenimentul Stripe (client_reference_id = id_tranzactie).
+ *
  * Ce este REAL:
  *   ✔ query-ul CTE extras direct din autoact-workflow-plati.json
  *     (nodul „Idempotenta (Postgres)"), doar cu env substituite;
@@ -134,7 +136,7 @@ const paralelCmd = (args, input) => new Promise((resolve) => {
     const comanda = { order_id: 'tr_ab12cd34ef56ab12', suma: PRET_RON, moneda: 'RON', status: 'confirmed' };
     const out1 = await psql(queryPentru(comanda));
     const camp1 = Object.fromEntries(out1.split('|').map((x, i) => [['order_id', 'status', 'suma', 'duplicat'][i], x]));
-    check(camp1.duplicat === '0', 'prima plată → duplicat = 0 (fluxul continuă spre facturare)', out1);
+    check(camp1.duplicat === '0', 'prima plată → duplicat = 0 (fluxul continuă spre generarea documentelor)', out1);
     check(camp1.order_id === comanda.order_id && camp1.status === 'confirmed' && camp1.suma === SUMA_DB, 'rândul returnat conține order_id/status/suma', out1);
 
     /* ---------- 5b: ACEEAȘI plată, repetată → duplicat = 1 ---------- */
@@ -142,7 +144,7 @@ const paralelCmd = (args, input) => new Promise((resolve) => {
     const camp2 = Object.fromEntries(out2.split('|').map((x, i) => [['order_id', 'status', 'suma', 'duplicat'][i], x]));
     check(camp2.duplicat === '1', 'aceeași plată repetată → duplicat = 1 (fluxul se oprește)', out2);
     const count = await psql('SELECT COUNT(*) FROM plati_procesate WHERE order_id = \'' + comanda.order_id + '\';');
-    check(count === '1', 'exact 1 rând în plati_procesate după 2 apeluri (zero facturi duplicate)', count);
+    check(count === '1', 'exact 1 rând în plati_procesate după 2 apeluri (zero pachete livrate de două ori)', count);
 
     /* ---------- 5c: stabilitate — 10 re-rulări, mereu exact 1 rând ----------
      * Contractul real al query-ului (ramura de fallback selectează

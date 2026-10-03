@@ -229,8 +229,11 @@ const scrieri = new Map();for (const linie of liniiEnv) {
 const valoare = (k) => (scrieri.has(k) ? scrieri.get(k).valoare : undefined);
 const linie = (k) => (scrieri.has(k) ? scrieri.get(k).linie : '');
 
-/* Cheile care trebuie să rămână GOALE, ca să fie completate manual cu secrete reale. */
-const cheiDeCompletat = ['NETOPIA_RSA_PRIVATE_KEY', 'NETOPIA_MPAY_SECRET',
+/* Cheile care trebuie să rămână GOALE, ca să fie completate manual cu secrete reale.
+ * STRIPE_WEBHOOK_SECRET e un Signing secret copiat din contul Stripe — nu poate
+ * fi generat de deploy; o valoare inventată acolo ar face ca prima plată reală
+ * să fie respinsă drept „semnătură invalidă”, fără niciun mesaj util. */
+const cheiDeCompletat = ['STRIPE_WEBHOOK_SECRET',
   'GOOGLE_DOCS_TEMPLATE_CONTRACT', 'GOOGLE_DOCS_TEMPLATE_DRPCIV', 'GOOGLE_DOCS_TEMPLATE_DECLARATII'];
 for (const k of cheiDeCompletat) {
   const v = valoare(k);
@@ -305,16 +308,19 @@ for (const k of ['POSTGRES_PASSWORD', 'N8N_ENCRYPTION_KEY']) {
   }
 }
 
-/* CIF-ul vine din config.js prin variabila de expandată pe server. */
-const cif = valoare('SMARTBILL_VAT_CODE');
-check(cif !== undefined && cif.includes('${AUTOACT_CIF}'),
-  'deploy: SMARTBILL_VAT_CODE e derivat din config.js (${AUTOACT_CIF}), nu scris manual',
-  cif === undefined ? 'cheia nu apare deloc în blocul .env' : 'valoare găsită: „' + cif + '”');
+/* Facturarea e a Stripe („Managed Payments" = Merchant of Record), deci nu
+ * mai există cheie de facturare proprie în .env. Prezența uneia ar însemna
+ * o a doua factură pentru aceeași plată — deci verificăm ABSENȚA ei. */
+check(!/SMARTBILL|NETOPIA/.test(deploy),
+  'deploy: nicio cheie Netopia/SmartBill (procesatorul unic e Stripe, Merchant of Record)',
+  'a rămas o cheie de facturare/deplată veche, care ar produce o a doua factură');
 
-/* Seria de facturare e configurație, nu secret — dar trebuie să fie explicită. */
-check(valoare('SMARTBILL_SERIE') === 'AUTOACT',
-  'deploy: SMARTBILL_SERIE are valoare explicită (AUTOACT)',
-  'valoare găsită: „' + valoare('SMARTBILL_SERIE') + '”');
+/* Cheile Stripe trebuie să ajungă în containerul n8n — altfel $env e gol
+ * în nodul de semnătură și fiecare plată e respinsă ca nesemnată. */
+check(compose.includes('STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}'),
+  'compose: STRIPE_WEBHOOK_SECRET ajunge în containerul n8n (altfel $env e gol în nodul de semnătură)');
+check(!/SMARTBILL|NETOPIA/.test(compose),
+  'compose: nicio cheie Netopia/SmartBill în environment-ul lui n8n');
 
 /* Domeniul vine ca argument al deploy-ului, nu e înscris în script. */
 const dom = valoare('DOMAIN');
@@ -328,7 +334,7 @@ check(dom !== undefined && /%/.test(dom),
  * (unde mai multe chei sunt lipite pe un singur rând). O cheie scrisă
  * cu valoare goală e corectă — de aceea pragul cere ca valoarea să
  * fie într-adevăr un șir lung, nu doar prezența cheii. */
-const CHEI_SECRET = ['NETOPIA_RSA_PRIVATE_KEY', 'NETOPIA_MPAY_SECRET',
+const CHEI_SECRET = ['STRIPE_WEBHOOK_SECRET',
   'N8N_ENCRYPTION_KEY', 'POSTGRES_PASSWORD', 'GOOGLE_OAUTH_CLIENT_SECRET'];
 const liniiDeploy = deploy.split('\n');
 for (const k of CHEI_SECRET) {
@@ -349,8 +355,8 @@ const { PRET_RON } = configAutoact || { PRET_RON: NaN };
 
 const COSTURI_VARIABILE = [
   { nume: 'OpenAI Vision OCR (5 imagini/comandă)', aproximare: '≈ 0,03 USD ≈ 0,13 RON/comandă' },
-  { nume: 'Netopia (procesare plată)', aproximare: 'comision per tranzacție + fix — de verificat la contract' },
-  { nume: 'SmartBill (factură + e-Factură)', aproximare: 'cotă per document — de verificat la contract' }
+  { nume: 'Stripe — procesare plată', aproximare: '≈ 2,54 lei/49 lei (măsurat pe sandbox)' },
+  { nume: 'Stripe „Managed Payments" (MoR)', aproximare: '≈ 3,5% + TVA reținută — de reconfirmat live' }
 ];
 console.log('');
 console.log('— Costuri care cresc cu volumul (NU sunt 0, dar nici nu blochează) —');
@@ -360,13 +366,13 @@ console.log('  dar „cost fix 0 RON” e o formulare corectă, nu „cost total
 console.log('');
 
 /* Gard de marjă: costul variabil NU poate înghiți prețul.
- * Suma e cea mai pesimistă rezonabilă: OCR (~0,13 RON) + un plafon
- * provizoriu pentru Netopia și SmartBill, înainte de contract. Doar
- * OCR-ul ar fi o asertare aproape vacuă — orice preț întreg valid
- * (minim 1 RON) ar trece peste 5 × 0,13.
- * NOTĂ: cifrele Netopia/SmartBill sunt estimări, nu oferte; ele se
- * înlocuiesc cu valorile contractuale definitive înainte de lansare. */
-const costVariabilPerComanda = 2.50;
+ * Suma e cea mai pesimistă rezonabilă: OCR (~0,13 RON) + procesare Stripe
+ * (~2,54 RON măsurată) + comision MoR 3,5% din 49 RON (~1,72 RON) + TVA
+ * reținută (8,50 RON, recoverată doar după regularizare). Doar OCR-ul ar
+ * fi o asertare aproape vacuă — orice preț întreg valid (minim 1 RON) ar
+ * trece peste 5 × 0,13. Cu suma de aici pragul devine real: la preț 49 lei
+ * avem 49 > 3 × 12,89, iar o eroare de tipar (49 → 4) ar CĂDEA. */
+const costVariabilPerComanda = 0.13 + 2.54 + 1.72 + 8.50;
 check(Number.isInteger(PRET_RON) && PRET_RON > costVariabilPerComanda * 3,
   'gard de marjă: prețul din config.js (' + PRET_RON + ' RON) acoperă costul variabil estimat (≈ ' +
   costVariabilPerComanda.toFixed(2) + ' RON/comandă) cu factor minimum 3×',

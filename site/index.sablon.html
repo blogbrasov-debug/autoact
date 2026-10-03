@@ -1,18 +1,18 @@
 <!DOCTYPE html>
 <!-- SABLON — nu edita site/index.html (se generează).
      Tokenul de preț este înlocuit cu valoarea din site/config.js. -->
-<html lang="ro" data-pret="{{PRET_EUR}}">
+<html lang="ro" data-pret="{{PRET_RON}}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AutoAct — Acte transcriere auto în 60 de secunde</title>
-  <meta name="description" content="Încarci pozele actelor, sistemul completează automat contractul, cererea DRPCIV și declarațiile fiscale. Verifici datele, plătești {{PRET_EUR_AFISAT}}, primești ZIP-ul instant.">
+  <meta name="description" content="Încarci pozele actelor, sistemul completează automat contractul, cererea DRPCIV și declarațiile fiscale. Verifici datele, plătești {{PRET_AFISAT}} cu TVA inclus, primești ZIP-ul instant.">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="hero">
     <h1>Actele pentru transcriere auto, gata în 60 de secunde</h1>
-    <p class="hero-sub">Încarci pozele actelor · sistemul completează automat contractul, cererea DRPCIV și declarațiile fiscale · verifici datele · plătești <strong id="hero-pret">{{PRET_EUR_AFISAT}}</strong> · primești ZIP-ul instant.</p>
+    <p class="hero-sub">Încarci pozele actelor · sistemul completează automat contractul, cererea DRPCIV și declarațiile fiscale · verifici datele · plătești <strong id="hero-pret">{{PRET_AFISAT}}</strong> (TVA inclus) · primești ZIP-ul instant.</p>
   </header>
 
   <main>
@@ -137,8 +137,8 @@
         </label>
       </div>
 
-      <button type="button" id="btn-plata" class="btn btn-plata" disabled>PLĂTEȘTE {{PRET_EUR_AFISAT}}</button>
-      <p class="hint centrat">Plată securizată Netopia 3-D Secure · primești ZIP-ul + factura pe e-mail în ~60 de secunde</p>
+      <button type="button" id="btn-plata" class="btn btn-plata" disabled>PLĂTEȘTE {{PRET_AFISAT}}</button>
+      <p class="hint centrat">Plată securizată Stripe · factură fiscală cu TVA inclus · primești ZIP-ul pe e-mail în ~60 de secunde</p>
     </section>
   </main>
 
@@ -197,14 +197,14 @@
         "@type": "Product",
         "@id": "{{SITE_URL}}#pachet",
         "name": "Pachet acte transcriere auto — AutoAct",
-        "description": "Contract vânzare-cumpărare + cerere DRPCIV + declarații fiscale, generate automat din pozele actelor și livrate în PDF pe e-mail.",
+        "description": "Contract vânzare-cumpărare + cerere DRPCIV + declarații fiscale, generate automat din pozele actelor și livrate în PDF pe e-mail. Preț cu TVA inclus.",
         "brand": { "@id": "{{SITE_URL}}#organizatie" },
         "inLanguage": "ro-RO",
         "areaServed": { "@type": "Country", "name": "România" },
         "offers": {
           "@type": "Offer",
-          "price": "{{PRET_EUR}}",
-          "priceCurrency": "EUR",
+          "price": "{{PRET_RON}}",
+          "priceCurrency": "RON",
           "availability": "https://schema.org/InStock",
           "url": "{{SITE_URL}}"
         }

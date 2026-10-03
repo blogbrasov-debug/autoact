@@ -26,8 +26,8 @@ fi
 SSH_TARGET="$1"
 
 # NAP-ul (CIF, adresă, telefon) vine din SURSĂ: site/config.js →
-# config-autoact.js. Nu îl scriem a cu gura, ca factura să nu iasă cu alt
-# CIF decât cel afișat pe site.
+# config-autoact.js. Nu îl scriem a cu gura, ca documentele oficiale să
+# nu poarte alt CIF decât cel afișat pe site.
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 NAP_JSON="$(cd "$PROJECT_DIR" && node -p 'JSON.stringify(require("./config-autoact.js").NAP)')"
 AUTOACT_CIF="$(printf '%s' "$NAP_JSON" | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).CIF')"
@@ -44,14 +44,15 @@ EROARE: NAP-ul din site/config.js e încă PLACEHOLDER.
   Adresă:  $(printf '%s' "$NAP_JSON" | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).ADRESA')
 
 Dacă deploy-ul ar continua, serverul ar primi CIF-ul fictiv în .env, iar
-facturile emise automat (SmartBill) ar fi neconforme.
+documentele oficiale (contractul, cererea DRPCIV) ar purta date care nu
+aparten nimănui.
 
 Corectează blocul NAP din site/config.js și reia. Pentru un test de
-infrastructură fără facturare reală, rulează cu ALLOW_PLACEHOLDER_NAP=1.
+infrastructură fără documente reale, rulează cu ALLOW_PLACEHOLDER_NAP=1.
 EOF
   exit 1
 fi
-echo "NAP folosit pentru facturare: CIF ${AUTOACT_CIF}$([ "$AUTOACT_PLACEHOLDER" = "true" ] && echo '  ⚠ PLACEHOLDER (permis explicit)')"
+echo "NAP folosit pe documente: CIF ${AUTOACT_CIF}$([ "$AUTOACT_PLACEHOLDER" = "true" ] && echo '  ⚠ PLACEHOLDER (permis explicit)')"
 DOMAIN="$2"
 REMOTE_DIR="~/autoact"
 
@@ -80,23 +81,31 @@ fi
 echo "    site sincronizat: ${PAGINI_ONLINE} pagini .html"
 
 echo "==> [2/5] Generez .env cu secrete aleatorii pe server..."
-# .env existent: nu îl suprascriu (secrete!), dar RECONCILIEZ CIF-ul —
-# altfel un NAP corectat după primul deploy nu s-ar propaga la factură.
+# .env existent: nu îl suprascriu (secrete!). Cheile Stripe și cele Google se
+# completează MANUAL în conturile lor — nu pot fi generate. De aceea deploy-ul
+# doar le VERIFICĂ și spune explicit care lipsește: altfel un secret lipsă ar
+# arăta ca un stack pornit cu succes, iar prima plată reală s-ar pierde tăcut
+# într-un workflow care nu știe dacă evenimentul e autentic.
 ssh "$SSH_TARGET" "cd ${REMOTE_DIR} && \\
   if [ -f .env ]; then
     echo '.env există deja — nu îl suprascriu.'
-    if grep -q '^SMARTBILL_VAT_CODE=${AUTOACT_CIF}\$' .env; then
-      echo '  CIF din .env e deja cel din config.js — nimic de făcut.'
-    else
-      echo \"  CIF din .env diferă de config.js — îl actualizez.\"
-      sed -i 's|^SMARTBILL_VAT_CODE=.*|SMARTBILL_VAT_CODE=${AUTOACT_CIF}|' .env
-    fi
+    lipsa=0
+    for cheie in STRIPE_WEBHOOK_SECRET GOOGLE_DOCS_TEMPLATE_CONTRACT GOOGLE_DOCS_TEMPLATE_DRPCIV GOOGLE_DOCS_TEMPLATE_DECLARATII; do
+      if grep -q \"^\${cheie}=.\" .env; then
+        echo \"  ok: \${cheie}\"
+      else
+        echo \"  ATENȚIE: \${cheie} e gol în .env — completeaz-o manual.\"
+        lipsa=1
+      fi
+    done
+    if [ \"\$lipsa\" = 0 ]; then echo '  toate cheile necesare sunt completate.'; fi
   else
     printf 'DOMAIN=%s\\n' '${DOMAIN}' > .env && \\
     printf 'POSTGRES_PASSWORD=%s\\n' \"\$(openssl rand -hex 24)\" >> .env && \\
     printf 'N8N_ENCRYPTION_KEY=%s\\n' \"\$(openssl rand -hex 24)\" >> .env && \\
-    printf 'NETOPIA_RSA_PRIVATE_KEY=\\nNETOPIA_MPAY_SECRET=\\nSMARTBILL_VAT_CODE=${AUTOACT_CIF}\\nSMARTBILL_SERIE=AUTOACT\\nGOOGLE_DOCS_TEMPLATE_CONTRACT=\\nGOOGLE_DOCS_TEMPLATE_DRPCIV=\\nGOOGLE_DOCS_TEMPLATE_DECLARATII=\\n' >> .env && \\
+    printf 'STRIPE_WEBHOOK_SECRET=\\nGOOGLE_DOCS_TEMPLATE_CONTRACT=\\nGOOGLE_DOCS_TEMPLATE_DRPCIV=\\nGOOGLE_DOCS_TEMPLATE_DECLARATII=\\n' >> .env && \\
     chmod 600 .env
+    echo '  .env creat. Completează manual cheile de mai sus.'
   fi"
 
 echo "==> [3/5] Configurez firewall-ul OS (80/443)..."
@@ -121,6 +130,9 @@ cat <<EOF
  Următorul pas (OBLIGATORIU): 
    - salvează local conținutul fișierului ${REMOTE_DIR}/.env
      (N8N_ENCRYPTION_KEY = cheia de decriptare a credentials-urilor!)
+   - completează în .env: STRIPE_WEBHOOK_SECRET (din Stripe → Developers →
+     Webhooks → endpoint → Signing secret) și cele 3 ID-uri de șabloane
+     Google Docs. Fără ele, nici o plată nu generează documente.
  Verificare:   ssh ${SSH_TARGET} 'cd ~/autoact && sudo docker compose logs -f n8n'
 ============================================================
 EOF

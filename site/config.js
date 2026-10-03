@@ -12,35 +12,54 @@
  * ⚠ ATENȚIE LA DEPLOY: valorile NAP de mai jos sunt PLACEHOLDER.
  * CIF-ul e validat structural de config-autoact.js (cifra de control),
  * dar placeholder-ul NU e o firmă reală — înlocuiește-le înainte de
- * lansare. Aceleași valori trebuie puse și în .env pe server:
- * SMARTBILL_VAT_CODE=<NAP.CIF>, altfel factura iese cu alt CIF.
+ * lansare. Aceleași valori trebuie puse și în contul Stripe (Settings →
+ * Business → Tax code) și în .env pe server:
+ * STRIPE_WEBHOOK_SECRET=<whsec_…>, altfel webhook-ul nu poate fi
+ * verificat și niciun document nu se generează.
  */
 window.AUTOACT_CONFIG = {
   WEBHOOK_URL: '',
-  /* Prețul are două fețe, dintr-o singură decizie:
- *   PRET_RON — valoarea contractuală, în lei, cea care se scrie în
- *              documentele românești (nu se schimbă: e prețul promises).
- *   PRET_EUR — suma efectiv încasată, în euro, prin Paddle.
- * Calculul este INVERS: 49 RON ÷ 5,3488 RON/EUR (curs ECB, 2 oct. 2026)
- * = 9,1609 EUR. Clientul plătește 9,16 € la cursul Paddle; contractul
- * consemnează 49 lei. config-autoact.js verifică la fiecare rulare că
- * cele două fețe sunt compatibile — altfel prețul ar plăti dublu. */
-PRET_RON: 49,
-PRET_EUR: 9.16,
 
-  /* Decizie fiscală (3 oct. 2026): procesatorul este **Paddle**, în rol de
-   * „Merchant of Record" — Paddle este vânzătorul de drept, emite documentul
-   * către client și remite TVA-ul, deci NU e nevoie de CUI ca să încasăm.
-   * Verificat: Paddle acceptă vânzători din România; plătește prin IBAN/BIC.
+  /* Prețul are O SINGURĂ față: 49 lei, TVA inclus.
+ * Clientul plătește și contractul consemnează aceeași sumă, în aceeași
+ * monedă — deci nu există curs de conversie, risc de variație și nici
+ * nevoie ca suma încasată să fie verificată în două locuri.
+ * Măsurătorile reale (Stripe sandbox, card de test, facturare România):
+ *   49,00 lei brut → tax reținut −8,50 · procesare −2,54 → net 37,96 lei
+ *   (varianta 9,16 € costa 36,89 lei: taxa de conversie de 3,52 lei nu
+ *    exista în niciodată una dintre cele două cifre din sandbox)
+ * ⚠ Netul de mai sus e din SANDBOX: comisionul „Managed Payments"
+ * (+3,5%/tranzacție) nu apare în simulare. De reconfirmat după Go live. */
+  PRET_RON: 49,
+
+  /* Decizie fiscală (3 oct. 2026): procesatorul este **Stripe**, cu
+   * „Managed Payments" — Stripe este vânzătorul de drept (Merchant of
+   * Record), emite factura și chitanța către client și reține TVA, deci
+   * NU e nevoie de CUI ca să încasăm. Produsul are tax_behavior inclus
+   * (preț cu TVA), iar codul fiscal de mai jos îl face „Eligible".
    *
    * Până la regularizare, banii sunt tot venit declarabil — procesatorul îi
    * raportează. PRAG_COMENZI_REGULARIZARE e comanda la care te oprești și
    * te înregistrezi (CUI/PFA). Singurul loc unde se schimbă cifra asta.
    */
   PLATARI: {
-    PROCESATOR: 'paddle',
+    PROCESATOR: 'stripe',
     PRAG_COMENZI_REGULARIZARE: 200
   },
+
+  /* Identificatorii din contul Stripe. ID-urile nu sunt secrete (Payment
+   * Link-ul ajunge oricum în payload-ul trimis clientului), dar nici ele
+   * nu se scriu cu gura în workflow-uri sau șabloane: config-autoact.js
+   * le citește aici și le generează acolo unde trebuie.
+   * La migrarea pe cont live se schimbă DOAR acest bloc. */
+  STRIPE: {
+    PRODUS_ID: 'prod_VNHNWQzMXG49vc',   // „Pachet acte auto — vânzare auto (contract + cerere DRPCIV)"
+    PRET_ID: 'price_1UMWpDPhXnPwCaLh5VcKOavY',   // 49.00 RON, one-off, TVA inclus
+    PAYMENT_LINK: 'https://buy.stripe.com/test_6oU8wR7L91QodQ97ap4ZG01',
+    COD_FISCAL: 'txcd_10000000',       // General — Electronically Supplied Services
+    WEBHOOK_URL_STRIPE: 'https://api.autoact.eu/webhook/stripe'
+  },
+
   NAP: {
     DENUMIRE: 'AutoAct',
     CIF: 'RO00000000',          // ← înlocuiește (placeholder)

@@ -9,9 +9,10 @@
 (function () {
   /* config.js e sursa reală a prețului; fallback-ul e doar pentru cazul
    * în care config.js nu se încarcă (nu mai e o a doua cifră de întreținut). */
-  const cfg = window.AUTOACT_CONFIG || { WEBHOOK_URL: '', PRET_EUR: Number(document.documentElement.dataset.pret) };
-  /* Suma încasată e în EUR; valoarea contractuală în lei o ține backend-ul. */
-  const PRET_AFISAT = (Number(cfg.PRET_EUR).toFixed(2).replace('.', ',') + ' €');
+  const cfg = window.AUTOACT_CONFIG || { WEBHOOK_URL: '', PRET_RON: Number(document.documentElement.dataset.pret) };
+  /* Prețul are o singură față: 49 lei, TVA inclus — suma contractată și
+   * suma încasată sunt identice, deci nu există conversie de valută. */
+  const PRET_AFISAT = Number(cfg.PRET_RON) + ' lei';
   const V = window.AUTOACT_VALIDARE;
 
   const $ = (sel) => document.querySelector(sel);
@@ -337,12 +338,13 @@
   $('#acord-client').addEventListener('change', actualizeazaTot);
 
   $('#btn-plata').addEventListener('click', async () => {
-    if (esteDemo) { alert('DEMO: aici s-ar deschide pagina de plată Paddle pentru ' + PRET_AFISAT + '.'); return; }
+    if (esteDemo) { alert('DEMO: aici s-ar deschide pagina de plată Stripe pentru ' + PRET_AFISAT + ' (TVA inclus).'); return; }
     const payload = {
       id_tranzactie: raspunsCurent.id_tranzactie || null,
       acord_client: true,
       date_corectate: Object.fromEntries(Object.entries(stare).map(([c, m]) => [c, m.val])),
-      suma: cfg.PRET_EUR
+      suma: cfg.PRET_RON,
+      moneda: 'RON'
     };
     const btn = $('#btn-plata');
     btn.disabled = true; btn.textContent = 'Se inițiază plata…';

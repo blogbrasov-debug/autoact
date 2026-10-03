@@ -33,7 +33,7 @@
 | `module-4/gdpr-purge.code-node.js` | Curățare GDPR — varianta nod Code n8n |
 | `module-5/plati-schema.sql` | Tabela `plati_procesate` (idempotency) + coloane adresă pentru facturare |
 | `module-5/build-workflow-plati.js` | Generatorul workflow-ului de plăți (rulare: `node module-5/build-workflow-plati.js`) |
-| `module-5/autoact-workflow-plati.json` | Workflow n8n importabil: Netopia → semnătură → idempotency → SmartBill → Docs ×3 → PDF → ZIP → Gmail (20 noduri) |
+| `module-5/autoact-workflow-plati.json` | Workflow n8n importabil: Stripe → semnătură → idempotency → Docs ×3 → PDF → ZIP → Gmail (22 noduri; facturarea e a Stripe) |
 | `module-5/test-e2e-idempotency.js` | **Scenariul 5+6 E2E contra PostgreSQL REAL** (container efemer, docker): idempotency pe `order_id` cu query-ul extras din workflow + efectul real al job-ului GDPR — 27 verificări |
 | `ruleaza-teste.sh` | Runner-ul unic al tuturor suitelor — folosit identic local și de CI |
 | `LAUNCH.md` | Planul de lansare: ordine cu dependențe, blocaje critice, rollback, checklist pre-GO (cifrele lui sunt verificate de `site/test-banca-cifre.js`) |
@@ -78,7 +78,7 @@ Fiecare intrare din `module-1/test-data-kit.json` include și nume/adresă ficti
     → [6 IF: scor ≥ 95 ȘI CNP valid?]
          ├─ false → [7 Respond to Webhook: ecran „Corectează datele”]  (fallback pasiv la client)
          └─ true  → [8 IF: plată confirmată?]
-                      ├─ false → [9 Respond to Webhook: ecran plată / link Netopia]
+                      ├─ false → [9 Respond to Webhook: ecran plată / Payment Link Stripe]
                       └─ true  → [10 Code: Docs → PDF → ZIP] → [11 Gmail: e-mail livrare + factură]
 ```
 
@@ -205,8 +205,8 @@ Fișier: **`module-2/autoact-workflow.json`** — generat de `node module-2/buil
 | 5 | Validator CNP | Algoritmul din §2.5 + scor: `100 − 8×campuri_nesigure − 15 (CNP invalid)` |
 | 6 | IF Scor & CNP | scor ≥ 95 AND cnp_valid_tot = true |
 | 7 | Fallback Client | JSON către UI: `campuri_nesigure`, `cnp_erori`, toate datele (ramura false) |
-| 8 | IF Plata | `plata_confirmata === true` (true la reintrarea webhook-ului Netopia) |
-| 9 | Respond Plata | `url_plata` spre Netopia (ramura false) |
+| 8 | IF Plata | `plata_confirmata === true` (true la reintrarea webhook-ului Stripe) |
+| 9 | Respond Plata | `url_plata` = Payment Link Stripe cu `client_reference_id` (ramura false) |
 | 10 | Documente ZIP | payload placeholder-e Google Docs (§2.7) + destinatar |
 | 11 | Gmail Livrare | e-mailul de livrare (§5.2) către `date_cumparator.email` |
 
@@ -232,7 +232,7 @@ Fișier: **`module-2/autoact-workflow.json`** — generat de `node module-2/buil
    | Source CIDR | Protocol | Dest. Port | Scop |
    |---|---|---|---|
    | `0.0.0.0/0` | TCP | 80 | Redirect HTTP→HTTPS + challenge ACME (Let's Encrypt) |
-   | `0.0.0.0/0` | TCP | 443 | UI n8n + webhook-uri (Netopia/Stripe) |
+   | `0.0.0.0/0` | TCP | 443 | UI n8n + webhook-uri (Stripe) |
 
    ⚠️ **Nu deschide portul 5678** (n8n nativ): n8n rămâne în rețeaua internă Docker; singura poartă publică este Caddy (reverse proxy cu SSL automat).
 5. **DNS:** la registrar (ex. Cloudflare/ClouDNS): `A autoact.eu → IP public instanță`, `A www → același IP`, TTL 300. Caddy emite certificatul Let's Encrypt doar după ce DNS-ul rezolvă corect domeniul spre IP-ul instanței.
@@ -244,7 +244,7 @@ Fișier: **`module-2/autoact-workflow.json`** — generat de `node module-2/buil
 
 Fișierul complet, gata de deploy: **`module-3/docker-compose.yml`**. Puncte-cheie:
 
-- **n8n** (`n8nio/n8n:latest`, imagine multi-arch — rulează nativ pe ARM64): `N8N_HOST=autoact.eu`, `N8N_PROXY_HOPS=1`, `WEBHOOK_URL=https://autoact.eu/`, `NODE_FUNCTION_ALLOW_BUILTIN=fs,path,crypto` (necesar pentru zip-store din Modulul 2.7 și decriptarea semnăturii Netopia din Modulul 5.1bis), `EXECUTIONS_DATA_PRUNE=true`, `EXECUTIONS_DATA_MAX_AGE=48` — n8n își curăță singur execuțiile mai vechi de 48 h.
+- **n8n** (`n8nio/n8n:latest`, imagine multi-arch — rulează nativ pe ARM64): `N8N_HOST=autoact.eu`, `N8N_PROXY_HOPS=1`, `WEBHOOK_URL=https://autoact.eu/`, `NODE_FUNCTION_ALLOW_BUILTIN=fs,path,crypto` (necesar pentru zip-store din Modulul 2.7 și verificarea semnăturii Stripe din Modulul 5.1bis), `EXECUTIONS_DATA_PRUNE=true`, `EXECUTIONS_DATA_MAX_AGE=48` — n8n își curăță singur execuțiile mai vechi de 48 h.
 - **PostgreSQL 16-alpine** cu volum dedicat `pgdata`; n8n se conectează prin `DB_TYPE=postgresdb`. Alternativa SQLite internă e OK pentru lansare, dar PG oferă backup/migrare curată.
 - **Caddy** (`caddy:2-alpine`) cu Caddyfile minimal montat din `./caddy/Caddyfile`: reverse proxy → `n8n:5678`, TLS automat Let's Encrypt, redirect 80→443.
 - Volum `local_files` → `/home/node/local` în containerul n8n (zona de lucru provizorie pentru ZIP-uri; curățată de job-ul GDPR din Modulul 4).
@@ -326,86 +326,112 @@ Fișier complet: **`module-4/gdpr-purge.code-node.js`** — parcurge execuțiile
 
 ---
 
-## MODULE 5 — API Facturare (SmartBill / Netopia) & E-mailuri Tranzacționale
+## MODULE 5 — Plăți Stripe (Merchant of Record) & E-mailuri Tranzacționale
 
-### 5.1 Fluxul de plată + facturare (zero-intervenție)
+### 5.1 Fluxul de plată (zero-intervenție)
 
 ```
-[UI: client plătește 49 RON] → [Netopia: redirect 3DS] → [Netopia → webhook POST https://autoact.eu/webhook/netopia]
-   → [n8n Webhook] → [Code: validare semnătură + idempotency] → [IF: payment_status == 'confirmed' && sumă == 49]
-        ├─ da → [Code: payload SmartBill] → [HTTP: POST /v2/documents] → [Gmail: ZIP + factură + instrucțiuni]
-        └─ nu → [Respond 200 silentios + log]  (fără alerte admin — fallback-ul rămâne la client)
+[UI: client plătește 49 RON] → [Stripe: Payment Link] → [Stripe → webhook POST https://autoact.eu/webhook/stripe]
+   → [n8n Webhook RAW BODY] → [Code: verificare semnătură Stripe] → [IF: semnătură validă]
+        ├─ nu  → [Respond 400]                          (fără alerte admin)
+        └─ da  → [idempotency] → [IF: payment_status == 'paid' && suma == 49 RON && moneda == 'RON']
+                     ├─ nu → [Respond 200 silentios]    (fallback-ul rămâne la client)
+                     └─ da → [Docs ×3 → PDF → ZIP → Gmail: pachetul + instrucțiuni]
 ```
 
-**Netopia (webhook):**
+**Facturarea NU e în acest workflow.** Stripe rulează cu „**Managed Payments**" (Merchant of
+Record): el este vânzătorul de drept, emite **factura și chitanța cu TVA** și le trimite
+clientului la plată. Un nod de facturare aici ar produce un **al doilea document fiscal**
+pentru aceeași plată.
 
-- URL de confirmare configurat în contul Netopia (MobilPay): `https://autoact.eu/webhook/netopia`, method POST, body URL-encoded.
-- Din motive de Free-Tier, semnătura se verifică cu cheia publică Netopia încărcată în n8n Credentials (tip „Public Key”) — nu se folosesc servicii externe de validare.
-- **Idempotență:** n8n ține evidența `order_id`-urilor procesate în PostgreSQL — dublul webhook (retransmisii Netopia) NU generează facturi duplicate.
+**Stripe (webhook):**
+
+- Endpoint: `POST https://autoact.eu/webhook/stripe`, eveniment `checkout.session.completed`.
+- **RAW BODY obligatoriu**: antetul `Stripe-Signature` e HMAC-SHA256 peste **octeții exacti**
+  ai body-ului. Un JSON parsat și re-serializat are altă ordine a cheilor → alt hash → fiecare
+  plată ar fi respinsă. De aceea nodul Webhook are `rawBody: true`, iar un body care ajunge
+  obiect (nu Buffer) e **respins**, nu „reconstruit".
+- Comparația se face cu `crypto.timingSafeEqual` (constantă în timp) și antetele mai vechi de
+  **300 s** sunt respinse — altfel un body capturat ar putea fi reluat oricând drept plată nouă.
+- Necesită `NODE_FUNCTION_ALLOW_BUILTIN=fs,path,crypto` (deja în docker-compose, Modulul 3)
+  și env-ul `STRIPE_WEBHOOK_SECRET` (Signing secret din contul Stripe).
+- **Legătura plată ↔ dosar:** Payment Link-ul primește `?client_reference_id=<id_tranzactie>`,
+  iar evenimentul îl aduce înapoi ca `order_id`. Fără el, evenimentul e marcat „fără tranzacție"
+  și respins de IF — nu se generează documente pentru o plată orfană.
+- **Suma** vine în unități mici (`amount_total: 4900`) și în notația minorității (`ron`);
+  normalizarea în lei + RON se face **într-un singur nod**, nu în fiecare consumator.
+- **Idempotență:** n8n ține evidența `order_id`-urilor procesate în PostgreSQL — dublul webhook
+  (retransmisii Stripe) NU generează pachete livrate de două ori.
 
 ### 5.1bis Workflow-ul de plăți importabil (File → Import from File)
 
-Fișier: **`module-5/autoact-workflow-plati.json`** — generat de `node module-5/build-workflow-plati.js` (12 noduri pipeline + 3 sticky, 14 auto-validări la fiecare generare).
+Fișier: **`module-5/autoact-workflow-plati.json`** — generat de `node module-5/build-workflow-plati.js`
+(18 noduri pipeline + 4 sticky = 22, ~40 de auto-validări la fiecare generare).
 
 ```
-[1 Webhook Netopia] → [2 Parsare POST] → [3 Decriptare Semnătură]
-   → [4 IF Semnătură Validă]
-        ├─ false → [5 Respond 496]                       (fără alerte admin)
-        └─ true  → [6 Idempotență: INSERT ON CONFLICT DO NOTHING RETURNING]
-                     → [7 IF Deja Procesată]
-                          ├─ true  → [8 Respond 200 {duplicat:true}]
-                          └─ false → [9 IF Plată Confirmată (status=confirmed, suma=49)]
-                                       ├─ false → [10 Respond 200 {factura:false}]
-                                       └─ true  → [11 Payload SmartBill] → [12 POST SmartBill + e-Factura]
+[1 Webhook Stripe (raw)] → [2 Verificare Semnătură]
+   → [3 IF Semnătură Validă]
+        ├─ false → [4 Respond 400]                          (fără alerte admin)
+        └─ true  → [5 Idempotență: INSERT ON CONFLICT DO NOTHING RETURNING]
+                     → [6 IF Deja Procesată]
+                          ├─ true  → [7 Respond 200 {duplicat:true}]
+                          └─ false → [8 Data Tranzacție (Postgres)]
+                                       → [9 IF Plată Confirmată (status=confirmed, moneda=RON, suma=49)]
+                                            ├─ false → [10 Respond 200 {factura:false}]
+                                            └─ true  → [11 Date Livrare] → [12 Placeholder-e Docs] → … → [18 Gmail Livrare ZIP]
 ```
 
-- **Nodul 3 (semnătura):** schema MobilPay/Netopia — `env_key` (primii 256 bytes) decriptat RSA-OAEP-SHA256 cu cheia privată → AES-256-CBC (IV = primele 16 bytes din cheia AES) → JSON cu `order_id/amount/currency/status` + **HMAC-SHA256** de integritate. Necesită `NODE_FUNCTION_ALLOW_BUILTIN=fs,path,crypto` (deja în docker-compose, Modulul 3) și env-urile `NETOPIA_RSA_PRIVATE_KEY` + `NETOPIA_MPAY_SECRET`.
-- **Nodul 6 (idempotency):** `INSERT ... ON CONFLICT (order_id) DO NOTHING RETURNING` pe tabela `plati_procesate` din `module-5/plati-schema.sql` — retransmisiile primesc `{ok, duplicat:true}` și opresc fluxul înainte de facturare.
-- **Nodul 12 (SmartBill):** Basic Auth (credentials n8n), payload construit din datele cumpărătorului, `eInvoice.sendEInvoice: true`, serie/CIF din env.
-- **Generarea documentelor (nodurile 14–20, integrate după SmartBill):** `Placeholder-e Docs` (37 înlocuiri × 3 documente din `profil_json` sau coloane aplatizate) → `Copie Template (Drive)` (template-urile NU se modifică niciodată) → `Docs batchUpdate` (replaceAllText ×37, matchCase) → `Export PDF (Drive)` (responseFormat file) → `Șterge Copia` (fără gunoi în Drive) → `ZIP Pachet` (zip-store inline, CRC32 + STORE, zero npm) → `Gmail Livrare ZIP` (atașament + factură + instrucțiuni). ID-urile șabloanelor din `module-2/sabloane/` vin din env: `GOOGLE_DOCS_TEMPLATE_CONTRACT/_DRPCIV/_DECLARATII` (deja în docker-compose + deploy script).
-- **Auto-validările builder-ului (23, toate PASS):** structură JSON (24 noduri = 20 pipeline + 4 sticky), graf conex (19 muchii, 20/20 accesibile), cele 3 ramuri IF, **sintaxa validată pentru TOATE cele 16 expresii**, simulare criptografică reală (RSA 2048 + AES-256-CBC + HMAC), simularea nodului 14 pe Test Data Kit (3 itemi × 37 replaceAllText, placeholder-ele = exact harta canonică, {{vehicul_vin}}/{{vanzator_nume}} din kit), evaluarea URL-urilor reale ale nodurilor 15–18, ZIP cu semnături PK verificate + 3 intrări, payload SmartBill din coloane aplatizate.
+- **Nodul 2 (semnătura):** HMAC-SHA256(`STRIPE_WEBHOOK_SECRET`, `"<t>.<body>"`) peste Buffer-ul
+  brut, comparat cu `timingSafeEqual`. Abia **după** potrivire evenimentul e parsat și
+  normalizat (`suma`, `moneda`, `order_id`, `email`).
+- **Nodul 5 (idempotency):** `INSERT ... ON CONFLICT (order_id) DO NOTHING RETURNING` pe tabela
+  `plati_procesate` din `module-5/plati-schema.sql` — cu fallback `UNION ALL`, ca răspunsul să
+  fie mereu exact 1 rând (altfel IF-ul rămâne fără input). Retransmisia primește
+  `{ok, duplicat:true}` și oprește fluxul **înainte** de generarea documentelor.
+- **Nodul 8 (Postgres):** aduce profilul complet (`profil_json`) + coloanele aplatizate + **e-mailul
+  din evenimentul Stripe** (`email_plata`) — checkout-ul e locul unde clientul își dă adresa reală.
+- **Nodul 11 (Date Livrare):** alegă destinatarul (dosarul are prioritate, altfel adresa de la
+  plată) și **se oprește cu mesaj explicit** dacă nu există niciuna — nu livrăm un ZIP fără
+  destinatar și nu cheltuim creditele Google Docs degeaba.
+- **Generarea documentelor (nodurile 12–18):** `Placeholder-e Docs` (37 înlocuiri × 3 documente
+  din `profil_json` sau coloane aplatizate) → `Copie Template (Drive)` (template-urile NU se
+  modifică niciodată) → `Docs batchUpdate` (replaceAllText ×37, matchCase) → `Export PDF (Drive)`
+  (responseFormat file) → `Șterge Copia` (fără gunoi în Drive) → `ZIP Pachet` (zip-store inline,
+  CRC32 + STORE, zero npm) → `Gmail Livrare ZIP` (atașament + instrucțiuni). ID-urile șabloanelor
+  vin din env: `GOOGLE_DOCS_TEMPLATE_CONTRACT/_DRPCIV/_DECLARATII`.
+  **Atenție la o capcană reală:** nodurile HTTP (Drive) *înlocuiesc* `$json` cu răspunsul lor, deci
+  orice metadată pusă înaintea lor (destinatar, nume, `nume_pdf`) se **pierde** până la `ZIP Pachet`.
+  De aceea ZIP-ul ia numele PDF-urilor din lista canonică `DOCUMENTE_DOCS` (poziția se păstrează,
+  fiindcă fiecare nod procesează itemii în ordine) și metadatele de livrare din `$('Date Livrare')`.
+  Fără destinatar, ZIP-ul **nu se construiește** — nu livrăm un pachet fără cineva.
+  Simularea din validator reproduce exact această pierdere (`items[].json` conține răspunsul Drive,
+  nu datele noastre), iar două mutații — întoarcerea la `items[0].json` și la `item.json.nume_pdf` —
+  fac validatorul să CADĂ, deci regresia nu poate trece neobservată.
+- **Auto-validările builder-ului (toate PASS):** structură JSON (22 noduri), graf conex
+  (17 muchii, 18/18 accesibile), cele 3 ramuri IF, **sintaxa validată pentru TOATE cele 17
+  expresii**, și — cele mai importante — **9 sabotaje reale ale semnăturii** fiecare simulate
+  cu `require('crypto')` adevărat: secret greșit, corp modificat cu antet valid, antet vechi
+  de o oră, antet absent, secret neconfigurat, body parsat în loc de raw, sumă greșită,
+  plată fără `client_reference_id`. Plus: simularea nodului 12 pe Test Data Kit
+  (3 itemi × 37 replaceAllText, placeholder-ele = exact harta canonică), URL-urile reale ale
+  nodurilor 13–16, ZIP cu semnăturile PK verificate + 3 intrări, și nodul 11 pe 4 scenarii
+  de livrare (inclusiv lipsa e-mailului).
+- **Prețul și suma vin din `config-autoact.js`** (`site/config.js`): `IF Plată Confirmată`
+  compară suma cu `PRET_RON` **și** verifică moneda. O cifră scrisă cu gura în workflow ar
+  însemna o plată acceptată la altă sumă decât cea afișată pe site.
 
-**SmartBill (generare factură + e-Factura):**
-
-Nod HTTP Request → `POST https://ws.smartbill.ro:8183/SBORO/api/document/new` cu Basic Auth (`user` + `token` din Settings → API din contul SmartBill). Payload:
-
-```json
-{
-  "companyVatCode": "ROXXXXXXXX",
-  "client": {
-    "name": "{{ $json.date_cumparator.nume_complet }}",
-    "vatCode": "{{ $json.date_cumparator.cnp }}",
-    "address": {
-      "city": "{{ $json.date_cumparator.localitate }}",
-      "street": "{{ $json.date_cumparator.adresa }}",
-      "county": "{{ $json.date_cumparator.judet }}"
-    },
-    "countryId": "RO",
-    "email": "{{ $json.date_cumparator.email }}"
-  },
-  "seriesName": "AUTOACT",
-  "issueDate": "{{ $json.date_tranzactie.data_vanzarii }}",
-  "productName": "Pachet acte transcriere auto — AutoAct",
-  "productDescription": "Contract v-c + cereri DRPCIV + declarații fiscale (PDF/ZIP)",
-  "quantity": 1,
-  "price": 49,
-  "currency": "RON",
-  "measuringUnit": "buc",
-  "saveToDraft": false,
-  "sendEmail": true,
-  "eInvoice": { "sendEInvoice": true }
-  // "sendEInvoice": true → SmartBill transmite automat spre e-Factura (SPV)
-}
-```
-
-- **TF simplificat**: serviciul de 49 RON către persoană fizică se emite fără-taxă (scutire art. 280 C.fisc.) — setezi productDescription cu mențiunea „TVA nu se percepe - regim simplificat (art. 282 ind. 2 C.fisc.)". *Verifică cu contabilul — decizie Fondator (HITL).*
-- **Alternativă gratuită totală:** [Factureaza.ro](https://factureaza.ro) — API REST + plan gratuit limitat (vezi limita lunară de documente în cont); payload aproape identic, doar `Authorization: Bearer`.
+**Prețul: 49 lei, TVA inclus** (`tax_behavior` pe produs). Decizia e măsurată pe Stripe
+sandbox: 49,00 lei brute → tax reținut −8,50, procesare −2,54 → **net 37,96 lei** (fără
+conversie de valută). Vezi LAUNCH.md §1.bis pentru comparația cu varianta în euro.
 
 ### 5.2 E-mailul de LIVRARE (la confirmarea plății — trimis pasiv din n8n)
 
+ (la confirmarea plății — trimis pasiv din n8n)
+
 > Trimis prin nodul **Gmail** din n8n (cont gratuit, 500 e-mail/zi) sau **Brevo** (300 e-mail/zi gratuit) — ambele OK pentru start.
 
-- **Subiect:** `AutoAct — actele tale pentru transcriere auto sunt gata (ZIP + factură)`
+- **Subiect:** `AutoAct — actele tale pentru transcriere auto sunt gata (ZIP)`
+- **Factura NU se atașează** — vine separat, de la Stripe, pe adresa folosită la plată.
 - **Body (HTML, gata de copy-paste):**
 
 ```html
@@ -435,7 +461,7 @@ Nod HTTP Request → `POST https://ws.smartbill.ro:8183/SBORO/api/document/new` 
 <strong>Echipa AutoAct</strong><br>
 autoact.eu · support@autoact.eu</p>
 
-<!-- Atașamente configurate în nodul Gmail: ZIP-ul generat în Modulul 2.7 + factura SmartBill -->
+<!-- Atașamente configurate în nodul Gmail: doar ZIP-ul generat în Modulul 2.7. Factura vine de la Stripe. -->
 ```
 
 ### 5.3 E-mailul de ABANDON COȘ (scansare făcută, plată nefinalizată)
@@ -504,7 +530,7 @@ autoact.eu · support@autoact.eu</p>
 │    eroare de date introduse de mine nu poate fi rambursată.              │
 │                                                                          │
 │  [ █████████████████ PLĂTEȘTE 49 RON █████████████████ ]  ← dezactivat   │
-│  Subiect: Netopia 3DS · În 60 s primești ZIP-ul + factura pe e-mail.     │
+│  Subiect: Stripe 3DS · În 60 s primești ZIP-ul pe e-mail; factura vine de la Stripe. │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -586,10 +612,10 @@ Cum arată acum:
 |---|---|
 | `site/config.js` | **sursa reală** |
 | `config-autoact.js` | `require('../config-autoact.js')` → valoarea extrasă din config.js; singurul mod prin care codul Node află prețul |
-| `site/index.sablon.html` | 5 tokenuri `{{PRET_RON}}`: `<html data-pret>`, meta description, hero, butonul de plată, JSON-LD |
+| `site/index.sablon.html` | 5 tokenuri de preț (`{{PRET_RON}}` / `{{PRET_AFISAT}}`): `<html data-pret>`, meta description, hero, butonul de plată, JSON-LD |
 | `site/index.html` | **generat** de `construieste-inline.js` (devenit artefact, verificat la pasul 11) |
 | `site/demo-standalone.html` | generat din `index.html` |
-| `module-5/build-workflow-plati.js` | prețul din payload-ul SmartBill și condiția `IF suma === PRET` vin din `config-autoact.js` |
+| `module-5/build-workflow-plati.js` | condiția `IF suma === PRET_RON && moneda === RON` vine din `config-autoact.js`; ID-urile Stripe vin din `site/config.js` |
 | `site/app.js` | runtime, din `AUTOACT_CONFIG.PRET_RON` (fallback-ul citește tot din HTML-ul generat) |
 
 **Guard-ul de conținut** (`site/test-banca-cifre.js`, pasul 10 din runner → rulează și în CI) citește doar *textul public* — meta description, titlu, text vizibil, obiectul JSON-LD — și CADE dacă o cifră nu vine din cod și nu e excepție declarată:

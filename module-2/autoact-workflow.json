@@ -204,7 +204,7 @@
       ],
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ status: \"awaiting_payment\", suma: 9.16, moneda: \"EUR\", suma_ron: 49, id_tranzactie: $json.id_tranzactie, url_plata: \"https://autoact.eu/plata?tr=\" + $json.id_tranzactie, mesaj: \"Finalizeaza plata pentru a genera documentele.\" }) }}",
+        "responseBody": "={{ (() => { const s = $json.id_tranzactie; const url = new URL(\"https://buy.stripe.com/test_6oU8wR7L91QodQ97ap4ZG01\"); url.searchParams.set(\"client_reference_id\", s); return JSON.stringify({ status: \"awaiting_payment\", suma: 49, moneda: \"RON\", suma_ron: 49, tva_inclus: true, id_tranzactie: s, url_plata: url.toString(), mesaj: \"Finalizeaza plata pentru a genera documentele.\" }); })() }}",
         "options": {
           "responseCode": 200
         }
@@ -288,7 +288,7 @@
         "width": 460,
         "height": 190,
         "color": 6,
-        "content": "### Ramura PLATĂ\n*IF Plata* devine true doar când fluxul Netopia (webhook separat) reintră cu `plata_confirmata=true` + `id_tranzactie`. Până atunci clientul primește `url_plata`.\n*Documente ZIP*: MVP emite payload + lista PDF; integrarea Google Docs → PDF → zip-store conform BLUEPRINT.md §2.7. Atașează ZIP-ul nodului Gmail din /home/node/local/."
+        "content": "### Ramura PLATĂ\n*IF Plata* devine true doar când fluxul Stripe (webhook separat) reintră cu `plata_confirmata=true` + `id_tranzactie`. Până atunci clientul primește `url_plata`.\n*Documente ZIP*: MVP emite payload + lista PDF; integrarea Google Docs → PDF → zip-store conform BLUEPRINT.md §2.7. Atașează ZIP-ul nodului Gmail din /home/node/local/."
       }
     }
   ],
