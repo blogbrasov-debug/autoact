@@ -39,9 +39,11 @@
 
 const fs = require('fs');
 const path = require('path');
-const { PRET_RON, NAP, PLACEHOLDER_NAP, RETENTION_H, EXCEPTII_CIFRE, cifraControlCif } = require('../config-autoact.js');
+const { PRET_RON, NAP, PLACEHOLDER_NAP, RETENTION_H, EXCEPTII_CIFRE, cifraControlCif,
+        PROCESATOR_PLATI, PRAG_REGULARIZARE } = require('../config-autoact.js');
 
 const rad = (p) => path.join(__dirname, p);
+const configJs = fs.readFileSync(rad('config.js'), 'utf8');
 let failures = 0;
 let checks = 0;
 
@@ -287,6 +289,22 @@ ok(launch.includes(wfPlati.nodes.length + ' noduri'), 'LAUNCH.md: numărul de no
 ok(launch.includes(nrPlaceholder + ' placeholder-e'), 'LAUNCH.md: numărul de placeholder-e e corect (' + nrPlaceholder + ')');
 ok(launch.includes(nrPasi + ' pași'), 'LAUNCH.md: numărul de pași ai runner-ului e corect (' + nrPasi + ')');
 ok(launch.includes(RETENTION_H + 'h'), 'LAUNCH.md: retenția GDPR menționată e cea implementată (' + RETENTION_H + 'h)');
+/* Decizia fiscală (procesator + prag de regularizare) stă în config.js.
+ * Dacă se schimbă procesatorul sau pragul într-un loc și nu în celălalt,
+ * planul de lansare și codul ar povesti lucruri diferite. */
+ok(
+  PROCESATOR_PLATI === 'paddle' && configJs.includes("PROCESATOR: 'paddle'"),
+  'decizia fiscală: procesatorul e Paddle (Merchant of Record) în config.js („' + PROCESATOR_PLATI + '")'
+);
+ok(
+  Number.isInteger(PRAG_REGULARIZARE) && PRAG_REGULARIZARE > 0
+    && configJs.includes('PRAG_COMENZI_REGULARIZARE: ' + PRAG_REGULARIZARE),
+  'decizia fiscală: pragul de regularizare (' + PRAG_REGULARIZARE + ' comenzi) e citibil din config.js'
+);
+ok(
+  launch.includes('Paddle') && launch.includes('Merchant of Record'),
+  'LAUNCH.md: decizia Paddle (Merchant of Record) e documentată, nu doar cod'
+);
 ok(launch.includes('RO00000000') === PLACEHOLDER_NAP, 'LAUNCH.md: statusul NAP-ului (placeholder/necompletat) corespunde lui config.js');
 for (const f of ['site/config.js', 'config-autoact.js', 'module-3/deploy-autoact.sh', 'module-2/sabloane/README.md', 'module-4/gdpr-purge.sql', 'module-5/plati-schema.sql']) {
   const citat = launch.includes('`' + f + '`') || launch.includes(f);

@@ -109,4 +109,21 @@ const EXCEPTII_CIFRE = {
   [RETENTION_H]: 'retenția GDPR promisă pe pagina de contact (verificată contra module-4/gdpr-purge.sql)'
 };
 
-module.exports = { PRET_RON, NAP, PLACEHOLDER_NAP, RETENTION_H, EXCEPTII_CIFRE, CONFIG, CHEIE_CIF, cifraControlCif };
+/* ---------- Decizia fiscală: procesator + prag de regularizare ----------
+ * Citite din site/config.js ca să nu existe o cifră scrisă în două locuri.
+ * PROCESATOR = 'paddle' → procesatorul este vânzătorul de drept (MoR) și
+ * emite documentul către client; nu e nevoie de CUI ca să încasăm.
+ * PRAG_COMENZI_REGULARIZARE = de la când se oprește vânzarea și se face CUI/PFA. */
+const PROCESATOR_PLATI = unica('PLATARI.PROCESATOR', /PROCESATOR\s*:\s*'[^']*'/).match(/'([^']*)'/)[1];
+if (!PROCESATOR_PLATI.trim()) throw new Error('site/config.js: PLATARI.PROCESATOR e gol.');
+const PRAG_REGULARIZARE = Number(
+  unica('PLATARI.PRAG_COMENZI_REGULARIZARE', /PRAG_COMENZI_REGULARIZARE\s*:\s*\d+/).match(/\d+/)[0]
+);
+if (!Number.isInteger(PRAG_REGULARIZARE) || PRAG_REGULARIZARE <= 0) {
+  throw new Error('site/config.js: PLATARI.PRAG_COMENZI_REGULARIZARE trebuie să fie un întreg pozitiv.');
+}
+
+module.exports = {
+  PRET_RON, NAP, PLACEHOLDER_NAP, RETENTION_H, EXCEPTII_CIFRE, CONFIG, CHEIE_CIF, cifraControlCif,
+  PROCESATOR_PLATI, PRAG_REGULARIZARE
+};

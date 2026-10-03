@@ -18,6 +18,20 @@
 window.AUTOACT_CONFIG = {
   WEBHOOK_URL: '',
   PRET_RON: 49,
+
+  /* Decizie fiscală (3 oct. 2026): procesatorul este **Paddle**, în rol de
+   * „Merchant of Record" — Paddle este vânzătorul de drept, emite documentul
+   * către client și remite TVA-ul, deci NU e nevoie de CUI ca să încasăm.
+   * Verificat: Paddle acceptă vânzători din România; plătește prin IBAN/BIC.
+   *
+   * Până la regularizare, banii sunt tot venit declarabil — procesatorul îi
+   * raportează. PRAG_COMENZI_REGULARIZARE e comanda la care te oprești și
+   * te înregistrezi (CUI/PFA). Singurul loc unde se schimbă cifra asta.
+   */
+  PLATARI: {
+    PROCESATOR: 'paddle',
+    PRAG_COMENZI_REGULARIZARE: 200
+  },
   NAP: {
     DENUMIRE: 'AutoAct',
     CIF: 'RO00000000',          // ← înlocuiește (placeholder)

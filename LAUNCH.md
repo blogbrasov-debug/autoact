@@ -196,6 +196,42 @@ Apoi, în n8n: **⋯ → Import from File** → `module-2/autoact-workflow.json`
 
 ---
 
+## 1.bis Decizia fiscală — cum încasăm **fără CUI** (3 oct. 2026)
+
+Procesatorul ales este **Paddle**, în rol de **Merchant of Record**: Paddle este vânzătorul de drept,
+emite documentul către client și remite TVA-ul. Deci **nu e nevoie de CUI ca să încasăm**.
+
+| Ce am verificat | Rezultat |
+|---|---|
+| Paddle acceptă vânzători din România? | **Da** — singurele excepții sunt țări sancționate, România nu e în listă |
+| Cum plătește Paddle? | **doar transfer bancar (IBAN/BIC)** — Payoneer **nu** e destinație de plată |
+| Ce rol are Payoneer? | nu e procesator de carduri; poate primi de pe platforme și retrage în cont bancar |
+| Procesatori românești (Netopia, SmartBill, Salt)? | cer **CUI** pentru contract de merchant |
+
+**Până la regularizare, banii sunt tot venit declarabil** — procesatorul raportează plățile.
+„Facturăm retroactiv când ne fiscalizăm" este **regularizare**, nu o scurtăcută: dacă ANAF consideră
+că ai desfășurat activitate economică neregistrată, urmează constatare și amendă.
+
+Pragul de regularizare e o singură cifră, în `site/config.js`:
+
+```
+PLATARI: { PROCESATOR: 'paddle', PRAG_COMENZI_REGULARIZARE: 200 }
+```
+
+`site/test-banca-cifre.js` verifică la fiecare rulare că procesatorul și pragul din config.js
+sunt aceleași cu cele exportate și descrise în acest document — decizia nu se învețeze în tăcere.
+
+⚠️ **Cifra 200 este o decizie de afacere, nu una de lege.** Pragul legal depinde de regimul
+aplicabil și trebuie confirmat cu un contabil înainte de a te baza pe el; o oră de consultanță
+costă 100–200 lei și elimină cea mai mare incertitudine din tot proiectul.
+
+**Nealiniat încă (spunem limpede):** `module-5/autoact-workflow-plati.json` este încă construit
+pentru Netopia + SmartBill. Migrarea la Paddle (checkout + webhook, fără factură proprie) e
+următoarea bucată de lucru și **nu e începută** — nu se face pe jumătate, fiindcă workflow-ul
+are ~30 de auto-validări legate de criptografia Netopia.
+
+---
+
 ## 2. Conținut legal — **nu se poate genera din cod**
 
 `/termeni` și `/gdpr` sunt linkate în footer dar **nu au pagină**. Textul lor e o decizie
