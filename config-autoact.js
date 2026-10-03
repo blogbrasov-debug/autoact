@@ -44,11 +44,31 @@ const textUnic = (eticheta, regex) => {
   return v;
 };
 
-/* ---------- Prețul ---------- */
+/* ---------- Prețul: valoare contractuală (lei) + sumă încasată (EUR) ---------- */
 const PRET_RON = Number(unica('PRET_RON', /PRET_RON\s*:\s*\d+/).match(/\d+/)[0]);
 if (!Number.isInteger(PRET_RON) || PRET_RON <= 0) {
   throw new Error('site/config.js: PRET_RON trebuie să fie un întreg pozitiv.');
 }
+const PRET_EUR = Number(unica('PRET_EUR', /PRET_EUR\s*:\s*[\d.]+/).match(/[\d.]+/)[0]);
+if (!(PRET_EUR > 0)) {
+  throw new Error('site/config.js: PRET_EUR trebuie să fie un număr pozitiv.');
+}
+/* Cursul de control: 1 EUR = 5,3488 RON (ECB, 2 oct. 2026). Nu e o cotă live —
+ * e banda în care cele două fețe ale prețului sunt compatibile. Fără ea, o eroare
+ * de tipar (49 → 490, sau 9,16 → 91,6) ar trece neobservată și clientul ar
+ * plăti un preț diferit de cel contractat. */
+const CURS_EUR_RON = 5.3488;
+const CURS_TOLERANTA = 0.10;
+const cursImplicit = PRET_RON / PRET_EUR;
+if (Math.abs(cursImplicit - CURS_EUR_RON) / CURS_EUR_RON > CURS_TOLERANTA) {
+  throw new Error(
+    'site/config.js: PRET_RON (' + PRET_RON + ') și PRET_EUR (' + PRET_EUR + ') nu mai corespund. ' +
+    'Raportul implică ' + cursImplicit.toFixed(4) + ' RON/EUR, iar cursul de control e ' +
+    CURS_EUR_RON + ' (±' + Math.round(CURS_TOLERANTA * 100) + '%). Recalculează una dintre fețe.'
+  );
+}
+/* Textul afișat pe site: „9,16 €” — virgulă zecimală, simbol de euro. */
+const PRET_EUR_AFISAT = PRET_EUR.toFixed(2).replace('.', ',') + ' €';
 
 /* ---------- NAP (nume, adresă, contact) — sursa unică ---------- */
 const NAP = {
@@ -106,6 +126,7 @@ const RETENTION_H = 48;
 const EXCEPTII_CIFRE = {
   9500: 'placeholder de exemplu în câmpul „Prețul de vânzare” (nu e prețul AutoAct)',
   24: 'prag legal — scutire taxă transcriere pentru mașini sub 24 de luni',
+  16: 'partea zecimală a sumei încasate („9,16 €” = 49 lei ÷ 5,3488 RON/EUR), din config.js',
   [RETENTION_H]: 'retenția GDPR promisă pe pagina de contact (verificată contra module-4/gdpr-purge.sql)'
 };
 
@@ -125,5 +146,5 @@ if (!Number.isInteger(PRAG_REGULARIZARE) || PRAG_REGULARIZARE <= 0) {
 
 module.exports = {
   PRET_RON, NAP, PLACEHOLDER_NAP, RETENTION_H, EXCEPTII_CIFRE, CONFIG, CHEIE_CIF, cifraControlCif,
-  PROCESATOR_PLATI, PRAG_REGULARIZARE
+  PROCESATOR_PLATI, PRAG_REGULARIZARE, PRET_EUR, PRET_EUR_AFISAT, CURS_EUR_RON
 };

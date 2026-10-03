@@ -11,6 +11,10 @@
  * ============================================================ */
 'use strict';
 
+/* Prețul vine din SURSĂ (site/config.js): suma încasată în EUR și valoarea
+ * contractuală în lei. Niciuna nu e scrisă manual aici. */
+const { PRET_RON, PRET_EUR } = require('../config-autoact.js');
+
 /* ---------- Helper: numele valide de parametri n8n ---------- */
 function p(name) { return '=' + name; }
 
@@ -230,7 +234,7 @@ return [{ json: { ...date, id_tranzactie: $json.id_tranzactie, cnp_valid_tot, cn
     position: [1740, 520],
     parameters: {
       respondWith: 'json',
-      responseBody: '={{ JSON.stringify({ status: "awaiting_payment", suma_ron: 49, moneda: "RON", id_tranzactie: $json.id_tranzactie, url_plata: "https://autoact.eu/plata?tr=" + $json.id_tranzactie, mesaj: "Finalizeaza plata pentru a genera documentele." }) }}',
+      responseBody: '={{ JSON.stringify({ status: "awaiting_payment", suma: ' + PRET_EUR + ', moneda: "EUR", suma_ron: ' + PRET_RON + ', id_tranzactie: $json.id_tranzactie, url_plata: "https://autoact.eu/plata?tr=" + $json.id_tranzactie, mesaj: "Finalizeaza plata pentru a genera documentele." }) }}',
       options: { responseCode: 200 }
     }
   },

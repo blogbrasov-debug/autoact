@@ -17,7 +17,16 @@
  */
 window.AUTOACT_CONFIG = {
   WEBHOOK_URL: '',
-  PRET_RON: 49,
+  /* Prețul are două fețe, dintr-o singură decizie:
+ *   PRET_RON — valoarea contractuală, în lei, cea care se scrie în
+ *              documentele românești (nu se schimbă: e prețul promises).
+ *   PRET_EUR — suma efectiv încasată, în euro, prin Paddle.
+ * Calculul este INVERS: 49 RON ÷ 5,3488 RON/EUR (curs ECB, 2 oct. 2026)
+ * = 9,1609 EUR. Clientul plătește 9,16 € la cursul Paddle; contractul
+ * consemnează 49 lei. config-autoact.js verifică la fiecare rulare că
+ * cele două fețe sunt compatibile — altfel prețul ar plăti dublu. */
+PRET_RON: 49,
+PRET_EUR: 9.16,
 
   /* Decizie fiscală (3 oct. 2026): procesatorul este **Paddle**, în rol de
    * „Merchant of Record" — Paddle este vânzătorul de drept, emite documentul

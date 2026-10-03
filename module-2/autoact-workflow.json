@@ -204,7 +204,7 @@
       ],
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ status: \"awaiting_payment\", suma_ron: 49, moneda: \"RON\", id_tranzactie: $json.id_tranzactie, url_plata: \"https://autoact.eu/plata?tr=\" + $json.id_tranzactie, mesaj: \"Finalizeaza plata pentru a genera documentele.\" }) }}",
+        "responseBody": "={{ JSON.stringify({ status: \"awaiting_payment\", suma: 9.16, moneda: \"EUR\", suma_ron: 49, id_tranzactie: $json.id_tranzactie, url_plata: \"https://autoact.eu/plata?tr=\" + $json.id_tranzactie, mesaj: \"Finalizeaza plata pentru a genera documentele.\" }) }}",
         "options": {
           "responseCode": 200
         }

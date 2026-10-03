@@ -28,6 +28,8 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+/* Prețurile vin din config.js — suma încasată în EUR și valoarea contractuală în lei. */
+const { PRET_RON, PRET_EUR } = require('../config-autoact.js');
 
 const WF = JSON.parse(fs.readFileSync(path.join(__dirname, 'autoact-workflow.json'), 'utf8'));
 const nod = (nume) => {
@@ -185,7 +187,7 @@ check(evalueazaIF('IF Scor & CNP', stare) === true, 'E2E nod 6: IF Scor & CNP �
 // Nodul 8 (expresii REALE): IF Plata → false (încă neplătit)
 check(evalueazaIF('IF Plata', stare) === false, 'E2E nod 8: IF Plata → ramura FALSE înainte de plată');
 const raspunsPlata = JSON.parse(evalueazaExpresie(nod('Respond Plata').parameters.responseBody, stare));
-check(raspunsPlata.status === 'awaiting_payment' && raspunsPlata.suma_ron === 49, 'E2E nod 9: clientul primește awaiting_payment + 49 RON');
+check(raspunsPlata.status === "awaiting_payment" && raspunsPlata.suma === PRET_EUR && raspunsPlata.moneda === "EUR" && raspunsPlata.suma_ron === PRET_RON, "E2E nod 9: clientul primește awaiting_payment + suma în EUR + valoarea contractuală în lei");
 check(raspunsPlata.url_plata === 'https://autoact.eu/plata?tr=' + item.id_tranzactie, 'E2E nod 9: url_plata conține id_tranzactie');
 
 // Reintrare cu plata confirmată → IF true → Documente ZIP (cod REAL)

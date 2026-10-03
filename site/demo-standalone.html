@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="ro" data-pret="49">
+<html lang="ro" data-pret="9.16">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AutoAct — Acte transcriere auto în 60 de secunde</title>
-  <meta name="description" content="Încarci pozele actelor, sistemul completează automat contractul, cererea DRPCIV și declarațiile fiscale. Verifici datele, plătești 49 RON, primești ZIP-ul instant.">
+  <meta name="description" content="Încarci pozele actelor, sistemul completează automat contractul, cererea DRPCIV și declarațiile fiscale. Verifici datele, plătești 9,16 €, primești ZIP-ul instant.">
   <style>
 /* ============================================================
  * AutoAct | site | styles.css — temă completă, fără dependențe
@@ -226,7 +226,7 @@ details p { margin: 8px 0 0; color: var(--text-slabit); }
 <body>
   <header class="hero">
     <h1>Actele pentru transcriere auto, gata în 60 de secunde</h1>
-    <p class="hero-sub">Încarci pozele actelor · sistemul completează automat contractul, cererea DRPCIV și declarațiile fiscale · verifici datele · plătești <strong id="hero-pret">49 RON</strong> · primești ZIP-ul instant.</p>
+    <p class="hero-sub">Încarci pozele actelor · sistemul completează automat contractul, cererea DRPCIV și declarațiile fiscale · verifici datele · plătești <strong id="hero-pret">9,16 €</strong> · primești ZIP-ul instant.</p>
   </header>
 
   <main>
@@ -351,7 +351,7 @@ details p { margin: 8px 0 0; color: var(--text-slabit); }
         </label>
       </div>
 
-      <button type="button" id="btn-plata" class="btn btn-plata" disabled>PLĂTEȘTE 49 RON</button>
+      <button type="button" id="btn-plata" class="btn btn-plata" disabled>PLĂTEȘTE 9,16 €</button>
       <p class="hint centrat">Plată securizată Netopia 3-D Secure · primești ZIP-ul + factura pe e-mail în ~60 de secunde</p>
     </section>
   </main>
@@ -384,7 +384,16 @@ details p { margin: 8px 0 0; color: var(--text-slabit); }
  */
 window.AUTOACT_CONFIG = {
   WEBHOOK_URL: '',
-  PRET_RON: 49,
+  /* Prețul are două fețe, dintr-o singură decizie:
+ *   PRET_RON — valoarea contractuală, în lei, cea care se scrie în
+ *              documentele românești (nu se schimbă: e prețul promises).
+ *   PRET_EUR — suma efectiv încasată, în euro, prin Paddle.
+ * Calculul este INVERS: 49 RON ÷ 5,3488 RON/EUR (curs ECB, 2 oct. 2026)
+ * = 9,1609 EUR. Clientul plătește 9,16 € la cursul Paddle; contractul
+ * consemnează 49 lei. config-autoact.js verifică la fiecare rulare că
+ * cele două fețe sunt compatibile — altfel prețul ar plăti dublu. */
+PRET_RON: 49,
+PRET_EUR: 9.16,
 
   /* Decizie fiscală (3 oct. 2026): procesatorul este **Paddle**, în rol de
    * „Merchant of Record" — Paddle este vânzătorul de drept, emite documentul
@@ -546,7 +555,9 @@ window.AUTOACT_DEMO = {
 (function () {
   /* config.js e sursa reală a prețului; fallback-ul e doar pentru cazul
    * în care config.js nu se încarcă (nu mai e o a doua cifră de întreținut). */
-  const cfg = window.AUTOACT_CONFIG || { WEBHOOK_URL: '', PRET_RON: Number(document.documentElement.dataset.pret) };
+  const cfg = window.AUTOACT_CONFIG || { WEBHOOK_URL: '', PRET_EUR: Number(document.documentElement.dataset.pret) };
+  /* Suma încasată e în EUR; valoarea contractuală în lei o ține backend-ul. */
+  const PRET_AFISAT = (Number(cfg.PRET_EUR).toFixed(2).replace('.', ',') + ' €');
   const V = window.AUTOACT_VALIDARE;
 
   const $ = (sel) => document.querySelector(sel);
@@ -557,8 +568,8 @@ window.AUTOACT_DEMO = {
   const TOTAL_PASI = 4; // 0..3
 
   $('#inp-data').value = new Date().toISOString().slice(0, 10);
-  $('#hero-pret').textContent = cfg.PRET_RON + ' RON';
-  $('#btn-plata').textContent = 'PLĂTEȘTE ' + cfg.PRET_RON + ' RON';
+  $('#hero-pret').textContent = PRET_AFISAT;
+  $('#btn-plata').textContent = 'PLĂTEȘTE ' + PRET_AFISAT;
 
   function valideazaPas(n) {
     const err = $('#eroare-upload');
@@ -872,12 +883,12 @@ window.AUTOACT_DEMO = {
   $('#acord-client').addEventListener('change', actualizeazaTot);
 
   $('#btn-plata').addEventListener('click', async () => {
-    if (esteDemo) { alert('DEMO: aici s-ar deschide pagina de plată Netopia (3-D Secure) pentru ' + cfg.PRET_RON + ' RON.'); return; }
+    if (esteDemo) { alert('DEMO: aici s-ar deschide pagina de plată Paddle pentru ' + PRET_AFISAT + '.'); return; }
     const payload = {
       id_tranzactie: raspunsCurent.id_tranzactie || null,
       acord_client: true,
       date_corectate: Object.fromEntries(Object.entries(stare).map(([c, m]) => [c, m.val])),
-      suma_ron: cfg.PRET_RON
+      suma: cfg.PRET_EUR
     };
     const btn = $('#btn-plata');
     btn.disabled = true; btn.textContent = 'Se inițiază plata…';
@@ -893,7 +904,7 @@ window.AUTOACT_DEMO = {
     } catch (e) {
       alert('Eroare la inițierea plății: ' + e.message);
       btn.disabled = false;
-      btn.textContent = 'PLĂTEȘTE ' + cfg.PRET_RON + ' RON';
+      btn.textContent = 'PLĂTEȘTE ' + PRET_AFISAT;
     }
   });
 
@@ -950,8 +961,8 @@ window.AUTOACT_DEMO = {
         "areaServed": { "@type": "Country", "name": "România" },
         "offers": {
           "@type": "Offer",
-          "price": "49",
-          "priceCurrency": "RON",
+          "price": "9.16",
+          "priceCurrency": "EUR",
           "availability": "https://schema.org/InStock",
           "url": "https://autoact.eu"
         }

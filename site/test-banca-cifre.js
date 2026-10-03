@@ -39,7 +39,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { PRET_RON, NAP, PLACEHOLDER_NAP, RETENTION_H, EXCEPTII_CIFRE, cifraControlCif,
+const { PRET_RON, PRET_EUR, PRET_EUR_AFISAT, NAP, PLACEHOLDER_NAP, RETENTION_H, EXCEPTII_CIFRE, cifraControlCif,
         PROCESATOR_PLATI, PRAG_REGULARIZARE } = require('../config-autoact.js');
 
 const rad = (p) => path.join(__dirname, p);
@@ -59,7 +59,8 @@ function ok(cond, msg) {
 
 /* ---------- 1. Ce e permis: din cod ---------- */
 const COD = {
-  [PRET_RON]: 'prețul pachetului, din site/config.js (singura sursă)'
+  [PRET_RON]: 'valoarea contractuală în lei, din site/config.js (singura sursă)',
+  [PRET_EUR]: 'suma încasată în EUR, din site/config.js (singura sursă)'
 };
 
 /* ---------- 2. Ce e permis: excepții declarate ---------- */
@@ -176,8 +177,9 @@ for (const p of SABLOANE) {
   verifica(s, 'site/' + p);
 }
 const sablon = fs.readFileSync(rad('index.sablon.html'), 'utf8');
-const tokenuri = (sablon.match(/\{\{PRET_RON\}\}/g) || []).length;
-ok(tokenuri === 5, 'site/index.sablon.html: 5 tokenuri {{PRET_RON}} (html data-pret, meta, hero, buton, JSON-LD) — găsite: ' + tokenuri);
+const tokenuri = (sablon.match(/\{\{PRET_(EUR|EUR_AFISAT)\}\}/g) || []).length;
+ok(tokenuri === 5, 'site/index.sablon.html: 5 tokenuri de preț (html data-pret, meta, hero, buton, JSON-LD) — găsite: ' + tokenuri);
+ok(!sablon.includes('{{PRET_RON}}'), 'site/index.sablon.html: prețul afișat vine din PRET_EUR, nu din valoarea în lei');
 const tokenuriNap = sablon.match(/\{\{(CIF|REG_COM|ADRESA|TELEFON|EMAIL|DENUMIRE|SITE_URL)\}\}/g) || [];
 const cheiNap = [...new Set(tokenuriNap.map((t) => t.slice(2, -2)))].sort();
 const asteptate = ['ADRESA', 'CIF', 'DENUMIRE', 'EMAIL', 'REG_COM', 'SITE_URL', 'TELEFON'];
@@ -233,7 +235,7 @@ ok(org && org.vatID === NAP.CIF, 'JSON-LD: Organization.vatID = CIF-ul din confi
 ok(org && org.email === NAP.EMAIL && org.telephone === NAP.TELEFON, 'JSON-LD: Organization poate contactul din config.js');
 ok(org && org.address && org.address.streetAddress === NAP.ADRESA && org.address.addressCountry === 'RO', 'JSON-LD: adresa poștală NAP cu addressCountry RO');
 ok(org && org.contactPoint && org.contactPoint.contactType && org.contactPoint.availableLanguage === 'ro', 'JSON-LD: contactPoint cu tip și limbă română');
-ok(prod && prod.offers.price === String(PRET_RON) && prod.offers.priceCurrency === 'RON', 'JSON-LD: Product.offers.price = ' + PRET_RON + ' RON (din config.js)');
+ok(prod && prod.offers.price === String(PRET_EUR) && prod.offers.priceCurrency === 'EUR', 'JSON-LD: Product.offers.price = ' + PRET_EUR + ' EUR (din config.js)');
 ok(prod && prod.brand && prod.brand['@id'] === org['@id'], 'JSON-LD: Product.brand referă Organization-ul (nu o copie a numelui)');
 ok(web && web.publisher && web.publisher['@id'] === org['@id'], 'JSON-LD: WebSite.publisher referă Organization-ul');
 ok(prod && prod.areaServed && prod.areaServed.name === 'România', 'JSON-LD: Product.areaServed = România');
@@ -323,14 +325,15 @@ if (PLACEHOLDER_NAP) {
 
 /* ============ 5. Coerența prețului: HTML = config.js ============ */
 const metaDesc = indexHtml.match(/<meta[^>]*name="description"[^>]*content="([^"]*)"/)[1];
-ok(metaDesc.includes(PRET_RON + ' RON'), 'meta description conține prețul din config.js (' + PRET_RON + ' RON)');
+ok(metaDesc.includes(PRET_EUR_AFISAT), 'meta description conține suma încasată din config.js (' + PRET_EUR_AFISAT + ')');
+ok(!/plătești\s+\d+\s+RON/.test(metaDesc), 'meta description nu mai promite sumă în lei: clientul plătește în EUR');
 const buton = indexHtml.match(/id="btn-plata"[^>]*>([^<]*)</)[1];
-ok(buton.includes(String(PRET_RON)), 'butonul de plată conține prețul din config.js — text: „' + buton.trim() + '”');
-ok(!indexHtml.includes('{{PRET_RON}}'), 'index.html generat: niciun token neînlocuit');
+ok(buton.includes(PRET_EUR_AFISAT), 'butonul de plată conține suma încasată din config.js — text: „' + buton.trim() + '”');
+ok(!indexHtml.includes('{{PRET_EUR') && !indexHtml.includes('{{PRET_RON}}'), 'index.html generat: niciun token neînlocuit');
 ok(!/<!--\s*SABLON/.test(indexHtml) && !/SABLON\s+—\s+nu edita/.test(indexHtml), 'index.html generat: nicio notă de build din șablon nu ajunge în pagina publică');
 ok(
-  (indexHtml.match(/<html lang="ro" data-pret="(\d+)">/) || [])[1] === String(PRET_RON),
-  'index.html: <html data-pret> = ' + PRET_RON + ' (fallback-ul din app.js vine tot din config.js)'
+  (indexHtml.match(/<html lang="ro" data-pret="([\d.]+)">/) || [])[1] === String(PRET_EUR),
+  'index.html: <html data-pret> = ' + PRET_EUR + ' EUR (fallback-ul din app.js vine tot din config.js)'
 );
 
 /* Placeholder-ul din atribut nu e „text public”, deci guard-ul de cifre
@@ -346,12 +349,12 @@ console.log('— test de mutație (verifică că guard-ul nu e decorativ) —');
 /* Fiecare probă este o mutație REALĂ aplicată textului curent:
  * cineva editează index.html și scrie o cifră greșit. */
 const probe = [
-  ['butonul de plată arată 39 în loc de ' + PRET_RON,
-    (h) => h.replace('PLĂTEȘTE ' + PRET_RON + ' RON', 'PLĂTEȘTE 39 RON')],
+  ['butonul de plată arată 39 € în loc de ' + PRET_EUR_AFISAT,
+    (h) => h.replace('PLĂTEȘTE ' + PRET_EUR_AFISAT, 'PLĂTEȘTE 39,00 €')],
   ['JSON-LD anunță prețul 39 (Google indexează exact asta)',
-    (h) => h.replace('"price": "' + PRET_RON + '"', '"price": "39"')],
-  ['meta description promite 59 RON',
-    (h) => h.replace('plătești ' + PRET_RON + ' RON, primești', 'plătești 59 RON, primești')],
+    (h) => h.replace('"price": "' + PRET_EUR + '"', '"price": "39"')],
+  ['meta description promite 59 €',
+    (h) => h.replace('plătești ' + PRET_EUR_AFISAT + ', primești', 'plătești 59 €, primești')],
   ['apare o sumă nouă în pagină (129)',
     (h) => h.replace('~60 de secunde', '~60 de secunde (pachetul costă 129 RON)')],
   ['promisiunea de timp din buton devine 90 de secunde',
