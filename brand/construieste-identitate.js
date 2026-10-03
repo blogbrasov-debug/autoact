@@ -194,6 +194,26 @@ scrie('facebook-acoperire.html', pagina('AutoAct · imagine de acoperire',
 /* --- Modele de postare: 1080×1080 (pătrat, ocupă mai mult ecran) --- */
 const modelPost = (id, stil, corp) => scrie('facebook-post-' + id + '.html', pagina('AutoAct · post ' + id, corp, 1080, 1080));
 
+/* --- Imagine de partajajare (Open Graph): 1200×630 ---
+ * NU e o „postare de Facebook". Este previzualizarea care apare când
+ * cineva partajează un link spre autoact.eu — într-un comentariu, într-un
+ * mesaj privat sau chiar într-un grup. Fără ea, linkul se afișează ca un
+ * URL gol: fără titlu, fără imagine, deci fără motiv de clic.
+ * Dimensiunea 1200×630 e cea cerută de Facebook; textul stânga, pentru că
+ * Facebook taie marginea dreaptă pe mobil. */
+scrie('og-imagine.html', pagina('AutoAct · imagine de partajajare',
+  `    <div style="width:100%;height:100%;background:linear-gradient(120deg,${C.albastruInchis} 0%,${C.albastru} 60%,#0b3d91 100%);position:relative;overflow:hidden;">
+      <div style="position:absolute;inset:0;opacity:.07;background-image:radial-gradient(#ffffff 2px,transparent 2px);background-size:46px 46px;"></div>
+      <div style="position:absolute;left:76px;top:50%;transform:translateY(-50%);max-width:830px;">
+        <div style="display:flex;align-items:center;gap:18px;margin-bottom:34px;">
+          <div style="width:74px;height:74px;">${LOGO_INLINE.replace('width="512" height="512"', 'width="74" height="74"')}</div>
+          <div style="color:#ffffff;font:700 30px/1 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;letter-spacing:.5px;">AutoAct</div>
+        </div>
+        <div style="color:#ffffff;font:800 62px/1.1 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;">Actele gata<br>din pozele tale.</div>
+        <div style="color:#ffffff;opacity:.9;font:500 27px/1.4 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;margin-top:24px;">Contract, cerere DRPCIV și declarații fiscale —<br>49 lei, TVA inclus.</div>
+      </div>
+    </div>`, 1200, 630));
+
 modelPost('durata', 'durata', `
     <div style="width:100%;height:100%;background:${C.fundal};padding:84px;display:flex;flex-direction:column;justify-content:center;gap:40px;">
       <div style="display:flex;align-items:center;gap:20px;">
@@ -235,7 +255,7 @@ modelPost('intrebare', 'intrebare', `
 
 /* ---------- 5. Verificări finale ---------- */
 console.log('');
-const obligatorii = ['logo.svg', 'logo-placuta.svg', 'facebook-profil.html',
+const obligatorii = ['logo.svg', 'logo-placuta.svg', 'og-imagine.html', 'facebook-profil.html',
   'facebook-acoperire.html', 'facebook-post-durata.html',
   'facebook-post-proces.html', 'facebook-post-intrebare.html'];
 for (const f of obligatorii) {
@@ -251,6 +271,12 @@ check(/width: 1640px; height: 856px/.test(acoperire),
 const profil = fs.readFileSync(path.join(OUT, 'facebook-profil.html'), 'utf8');
 check(/width: 320px; height: 320px/.test(profil),
   'fotografia de profil e generată la 320×320 (pătrat 1:1)');
+/* 1200×630 e standardul Open Graph. Facebook taie imaginea de
+ * previzualizare la 1200×630, iar la alte dimensiuni cad marginile
+ * laterale — tocmai de aceea textul e așezat în stânga. */
+const ogImg = fs.readFileSync(path.join(OUT, 'og-imagine.html'), 'utf8');
+check(/width: 1200px; height: 630px/.test(ogImg),
+  'imaginea de partajajare e generată la 1200×630 (standard Open Graph)');
 
 console.log('');
 console.log('construieste-identitate: ' + total + ' verificări · ' + esecuri + ' eșuate');

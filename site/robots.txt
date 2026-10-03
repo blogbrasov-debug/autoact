@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /webhook/
+Disallow: /n8n/
+Disallow: /*.sablon.html
+Disallow: /construieste-*.js
+Sitemap: https://autoact.eu/sitemap.xml

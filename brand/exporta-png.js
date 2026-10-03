@@ -62,6 +62,7 @@ console.log('');
 const CADRURI = [
   { html: 'facebook-acoperire.html', nume: 'facebook-acoperire.png' },
   { html: 'facebook-profil.html', nume: 'facebook-profil.png' },
+  { html: 'og-imagine.html', nume: 'og-imagine.png' },
   { html: 'facebook-post-durata.html', nume: 'facebook-post-durata.png' },
   { html: 'facebook-post-proces.html', nume: 'facebook-post-proces.png' },
   { html: 'facebook-post-intrebare.html', nume: 'facebook-post-intrebare.png' }

@@ -93,7 +93,7 @@ scp caddy/Caddyfile "${SSH_TARGET}:${REMOTE_DIR}/caddy/Caddyfile"
 # Excludem fișierele de test și șabloanele: nu sunt servite, iar
 # testul de bancă de cifre nu are ce căuta pe un server public.
 scp -r ../site/. "${SSH_TARGET}:${REMOTE_DIR}/site/"
-ssh "$SSH_TARGET" "rm -f ${REMOTE_DIR}/site/*.sablon.html ${REMOTE_DIR}/site/test-*.js ${REMOTE_DIR}/site/construieste-inline.js"
+ssh "$SSH_TARGET" "rm -f ${REMOTE_DIR}/site/*.sablon.html ${REMOTE_DIR}/site/test-*.js ${REMOTE_DIR}/site/construieste-inline.js ${REMOTE_DIR}/site/construieste-og.js"
 
 # Verificare explicită: mai puțin de 3 pagini înseamnă că sincronizarea
 # a eșuat tăcut și site-ul nu va răspunde.

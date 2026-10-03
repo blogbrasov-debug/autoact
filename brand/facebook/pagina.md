@@ -86,6 +86,29 @@ Site: https://autoact.eu
 | `https://autoact.eu/gdpr` | politica de confidențialitate, cu cine procesează datele și cât timp le ține |
 | `https://autoact.eu/contact` | datele de contact complete |
 
+### Fiecare link arată acum un card complet
+
+Când cineva pune `https://autoact.eu` într-un comentariu sau într-un mesaj,
+Facebook **nu** citește `<title>` — citește etichetele `og:`. Site-ul nu avea
+niciuna, deci orice link postat se vedea ca un URL gol: fără titlu, fără
+imagine, fără motiv de clic.
+
+Acum fiecare pagină are titlu, descriere, imagine la 1200×630 și adresă
+canonică proprie — generate din același `config.js`, verificate automat
+(37 de verificări, `node site/construieste-og.js`).
+
+**Când verifici:** după ce postezi primul link, Facebook păstrează cardul în
+cache zile întregi. De aceea verifică **într-un mod privat, de pe telefon**,
+nu doar de pe calculatorul tău: un link care ți se pare corect acasă poate fi
+un card gol pentru un utilizator care nu a mai intrat pe site.
+
+**Ce am verificat eu și ce n-am putut:** etichetele sunt prezente și corecte
+în toate cele patru pagini, iar imaginea există la dimensiunea cerută
+(1200×630) și e copiată în `site/`, unde deploy-ul o urcă. **Nu am putut
+verifica cum arată cardul pe Facebook**, pentru că `og:image` indică
+`https://autoact.eu/...` — adică un domeniu care încă nu e servit. Asta se
+verifică după primul deploy, nu înainte.
+
 **Blocaj:** aceste două pagini se generează din [`site/config.js`](../../site/config.js),
 iar blocul `LEGAL` (data de aplicare + instanțele) e încă necompletat. De aceea
 `deploy-autoact.sh` se oprește înainte de server — publicate așa, paginile ar

@@ -26,7 +26,9 @@
 | Git remote + push | ✅ repo public `blogbrasov-debug/autoact`, suita de 15 pași verde în CI |
 | Identitate vizuală Facebook (5 materiale la dimensiunile Meta) | ✅ generate în `brand/png/` |
 | Configurarea paginii + grupului Facebook | ✅ texte gata de lipit în `brand/facebook/` |
-| Gardul materialelor Facebook contra codului | ✅ 151 verificări + 7 mutații, pasul 14 |
+| Gardul materialelor Facebook contra codului | ✅ 163 verificări + 7 mutații, pasul 14 |
+| Previzualizarea linkurilor pe Facebook (`og:`) | ✅ 37 verificări, pasul 8 — altfel linkurile apar ca URL gol |
+| `sitemap.xml` + `robots.txt` | ✅ generate; fiecare URL din sitemap are pagina lui |
 | Pagină și grup pe Meta | ❌ **nu create** — NAP-ul placeholder blochează publicarea cu date de contact |
 | Verificarea identității pe Meta (buletin) | ❌ **nefăcută** — checklist pregătit în `brand/facebook/verificare-meta.md` |
 

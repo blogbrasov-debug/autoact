@@ -92,9 +92,15 @@ const salvate = MUTATII.map((m) => {
 try {
   /* Mutațiile ating șabloane, deci paginile generate trebuie re-randate
    * înainte de a verifica altfel am muta ceva ce nu ajunge la verificare. */
+  /* Refacem starea construită EXACT cum o găsește suita: mai întâi
+   * paginile din șabloane, apoi etichetele og:. Doar construieste-inline
+   * ar lăsa paginile fără og: — deci testul ar șterge, la final, exact
+   * lucrul pe care îl verifică, și următoarea rulare a suitei ar
+   * porni de pe un site fără previzualizare. */
   const reRandeaza = () => {
     try {
       execFileSync('node', [path.join(RAD, 'site', 'construieste-inline.js')], { stdio: 'ignore' });
+      execFileSync('node', [path.join(RAD, 'site', 'construieste-og.js')], { stdio: 'ignore' });
     } catch (e) { /* un șablon rupt trebuie să facă verificarea să cadă, nu build-ul să tacă */ }
   };
   const restaureaza = () => {

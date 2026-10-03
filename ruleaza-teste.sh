@@ -29,7 +29,7 @@ for f in \
   module-5/test-mutatie-cost.js \
   module-5/test-caddy-rutare.js \
   config-autoact.js \
-  site/app.js site/validare.js site/config.js site/demo-data.js site/construieste-inline.js \
+  site/app.js site/validare.js site/config.js site/demo-data.js site/construieste-inline.js site/construieste-og.js \
   site/test-banca-cifre.js site/test-mutatie-pagini-legale.js config-autoact.js \
   verifica-ui-validare.js \
   brand/construieste-identitate.js brand/exporta-png.js \
@@ -38,7 +38,7 @@ do
   node --check "$f"
 done
 bash -n module-3/deploy-autoact.sh
-echo "OK — 25 fișiere JS + 1 bash, sintaxă validă"
+echo "OK — 26 fișiere JS + 1 bash, sintaxă validă"
 
 pas "2/15 · Scheme JSON (Profil de Tranzacție + harta placeholder-e)"
 node -e "JSON.parse(require('fs').readFileSync('module-1/profil-tranzactie.schema.json','utf8')); console.log('profil-tranzactie.schema.json: VALID')"
@@ -59,10 +59,11 @@ node module-1/populeaza-tranzactie-demo.js
 pas "7/15 · Șabloane Google Docs — 57 de verificări (tokeni, căi, harta nodului)"
 node module-2/verifica-sabloane.js
 
-pas "8/15 · Builder-e workflow (pipeline + plăți) + site (pagini din șabloane + demo inline)"
+pas "8/15 · Builder-e workflow (pipeline + plăți) + site (pagini din șabloane + demo inline + etichete de partajare)"
 node module-2/build-workflow.js
 node module-5/build-workflow-plati.js
 node site/construieste-inline.js
+node site/construieste-og.js
 
 pas "9/15 · Pipeline END-TO-END: webhook→OCR fake→Gemini fake→validator→IF-uri→ZIP→Gmail"
 node module-2/test-pipeline-e2e.js
@@ -87,7 +88,11 @@ node brand/test-mutatie-facebook.js
 
 pas "15/15 · Artefacte generate la zi + docker compose config"
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  for artefact in module-2/autoact-workflow.json module-5/autoact-workflow-plati.json site/index.html site/contact.html site/termeni.html site/gdpr.html site/demo-standalone.html brand/png/facebook-acoperire.png brand/png/facebook-profil.png; do
+  # site/sitemap.xml NU e în listă: conține data zilei, deci se schimbă
+# la fiecare build prin definiție — un artefact care diferă oricum nu
+# poate fi cerut „identic cu versiunea comisă". Ce contează la sitemap
+# se verifică în construieste-og.js (fiecare URL corespunde unei pagini).
+for artefact in module-2/autoact-workflow.json module-5/autoact-workflow-plati.json site/index.html site/contact.html site/termeni.html site/gdpr.html site/demo-standalone.html site/robots.txt site/og-imagine.png brand/png/facebook-acoperire.png brand/png/facebook-profil.png brand/png/og-imagine.png; do
     if test -z "$(git status --porcelain -- "$artefact")"; then
       echo "OK  $artefact este la zi (identic cu versiunea comisă)"
     else
@@ -98,6 +103,15 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 else
   echo "(nu este repo git — sar peste verificarea artefactelor comise; în CI rulează complet)"
 fi
+# Ultimul lucru: paginile livrate chiar mai au etichetele og:. Se
+# verifică la SFÂRȘITUL suitei, nu doar în constructor, pentru că un
+# pas ulterior (un test care rerandează din șabloane) le poate șterge
+# fără să cadă nimic — și atunci site-ul rămâne fără previzualizare.
+for f in site/index.html site/contact.html site/termeni.html site/gdpr.html; do
+  n=$(grep -c 'property="og:image"' "$f" || true)
+  if [ "$n" = "1" ]; then echo "OK  $f are eticheta de partajare"; else echo "FAIL $f a rămas fără eticheta og:image (x$n)"; exit 1; fi
+done
+
 if command -v docker >/dev/null 2>&1; then
   docker compose -f module-3/docker-compose.yml config -q 2>/dev/null && echo "OK  docker compose config valid"
 else
