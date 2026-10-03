@@ -33,12 +33,13 @@ for f in \
   site/test-banca-cifre.js site/test-mutatie-pagini-legale.js config-autoact.js \
   verifica-ui-validare.js \
   brand/construieste-identitate.js brand/exporta-png.js \
-  brand/test-copy-facebook.js brand/test-mutatie-facebook.js
+  brand/test-copy-facebook.js brand/test-mutatie-facebook.js \
+  brand/facebook/cheie-de-configurare.js
 do
   node --check "$f"
 done
 bash -n module-3/deploy-autoact.sh
-echo "OK — 26 fișiere JS + 1 bash, sintaxă validă"
+echo "OK — 27 fișiere JS + 1 bash, sintaxă validă"
 
 pas "2/15 · Scheme JSON (Profil de Tranzacție + harta placeholder-e)"
 node -e "JSON.parse(require('fs').readFileSync('module-1/profil-tranzactie.schema.json','utf8')); console.log('profil-tranzactie.schema.json: VALID')"
@@ -64,6 +65,7 @@ node module-2/build-workflow.js
 node module-5/build-workflow-plati.js
 node site/construieste-inline.js
 node site/construieste-og.js
+node brand/facebook/cheie-de-configurare.js
 
 pas "9/15 · Pipeline END-TO-END: webhook→OCR fake→Gemini fake→validator→IF-uri→ZIP→Gmail"
 node module-2/test-pipeline-e2e.js

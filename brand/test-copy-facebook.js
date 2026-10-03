@@ -87,11 +87,19 @@ const PROMISIUNI = [
  *  nedetectat până când normalizarea a fost adăugată. */
 const faraDiacritice = (t) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
+/** Fără datele încorporate. Imaginile păstrate ca data URI conțin
+ *  base64 — un alfabet în care șiruri de tip „49lei" sau „3documente"
+ *  apar cu tot și-năvășesc. Nu e o ipoteză: la prima rulare, o astfel
+ *  de potrivire a apărut într-un blob și a raportat un preț scris „cu
+ *  mâna" care nu există în pagină. Fără această curățare, gardul ar
+ *  începe să dea alarme false — exact ce distruge încrederea în el. */
+const faraDate = (t) => t.replace(/data:[a-z]+\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/gi, ' ');
+
 /** Blocurile de cod (```...```) și codul inline (`...`).
  *  Aici stau EXEMPLE de formulare interzisă: trebuie ignorate, sau
  *  documentul care arată ce nu trebuie scris s-ar autoprocesa. */
 const faraCod = (t) => faraDiacritice(
-  t.replace(/```[\s\S]*?```/g, ' ').replace(/`[^`\n]*`/g, ' ')
+  faraDate(t).replace(/```[\s\S]*?```/g, ' ').replace(/`[^`\n]*`/g, ' ')
 );
 
 /** Doar blocurile de cod — adică textul care se lipește efectiv în Meta.
@@ -120,7 +128,7 @@ check(toate.length >= 8,
 
 for (const f of toate) {
   const baza = path.basename(f);
-  const brut = fs.readFileSync(f, 'utf8');
+  const brut = faraDate(fs.readFileSync(f, 'utf8'));
 
   /* Prețul și numărul de documente se caută în TEXTUL BRUT, cu blocurile
    * de cod cu tot — fiindcă acolo stă textul care se lipește chiar în
