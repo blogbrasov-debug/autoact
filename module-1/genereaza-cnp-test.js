@@ -75,14 +75,35 @@ for (const k of kit) {
   }
 }
 
+const outPath = path.join(__dirname, 'test-data-kit.json');
+
+/* Timestamp-ul se păstrează dacă datele nu s-au schimbat.
+ *
+ * Generarea este deterministă (CNP-urile se calculează din același
+ * algoritm), dar `new Date()` ar rescrie `generat_la` la fiecare rulare
+ * și ar lăsa arborele murdar după `bash ruleaza-teste.sh` — modificare
+ * fără fond, care la următorul `git status` ar arăta ca o schimbare
+ * reală. Fișierul e și el verificat de runner ca artefact la zi, deci
+ * un timestamp mereu nou ar strica acel check.
+ */
+const anterior = fs.existsSync(outPath) ? JSON.parse(fs.readFileSync(outPath, 'utf8')) : null;
+const continutNou = JSON.stringify(kit);
+
+let generatLa = new Date().toISOString();
+if (anterior) {
+  const continutVechi = JSON.stringify(anterior.intrari);
+  if (continutVechi === continutNou && typeof anterior.generat_la === 'string') {
+    generatLa = anterior.generat_la;
+  }
+}
+
 const iesire = {
   disclaimer: 'Date 100% fictive, generate algoritmic pentru testare. Orice coincidenta cu persoane reale este intamplatoare. NU utiliza CNP-uri reale in medii de test.',
   algoritm: 'cheie 279146358279 | rest % 11 | rest 10 => cifra control 1',
-  generat_la: new Date().toISOString(),
+  generat_la: generatLa,
   intrari: kit
 };
 
-const outPath = path.join(__dirname, 'test-data-kit.json');
 fs.writeFileSync(outPath, JSON.stringify(iesire, null, 2) + '\n');
 
 console.table(kit.map((k) => ({ cnp: k.cnp, rol: k.rol, valid: k.valid })));

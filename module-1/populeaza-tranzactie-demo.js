@@ -36,6 +36,13 @@ function persoana(k, rol) {
   };
 }
 
+const outPath = path.join(__dirname, 'tranzactie-demo.json');
+
+/* `creat_la` se păstrează dacă tranzacția nu s-a schimbat.
+ * Fișierul se regenerează la fiecare rulare a suitei; un timestamp nou
+ * de fiecare dată ar lăsa arborele murdar fără vreo schimbare reală. */
+const anterior = fs.existsSync(outPath) ? JSON.parse(fs.readFileSync(outPath, 'utf8')) : null;
+
 const tranzactie = {
   id_tranzactie: 'tr_' + 'ab12cd34ef56ab12',
   stare: 'validare_ok',
@@ -92,7 +99,13 @@ if (!ok) {
   process.exit(1);
 }
 
-const outPath = path.join(__dirname, 'tranzactie-demo.json');
+if (anterior) {
+  const faraTimestamp = (o) => { const c = { ...o }; delete c.creat_la; return JSON.stringify(c); };
+  if (faraTimestamp(anterior) === faraTimestamp(tranzactie) && typeof anterior.creat_la === 'string') {
+    tranzactie.creat_la = anterior.creat_la;
+  }
+}
+
 fs.writeFileSync(outPath, JSON.stringify(tranzactie, null, 2) + '\n');
 console.log('OK → ' + outPath);
 console.log('Payload gata pentru: nodul Webhook n8n (Modulul 2) și UI-ul de pre-vizualizare (Modulul 6).');
