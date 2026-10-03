@@ -235,28 +235,31 @@ const CRC_TABLE = (() => {
 })();
 function crc32(buf) { let c = -1; for (let i = 0; i < buf.length; i++) c = (c >>> 8) ^ CRC_TABLE[(c ^ buf[i]) & 0xFF]; return (c ^ -1) >>> 0; }
 
+/* PDF-urile le luăm EXPLICIT din nodul „Export PDF (Drive)", nu din items.
+ * Motivul: între export și acest nod stă „Șterge Copia (Drive)" — un nod
+ * HTTP Request, care înlocuiește itemul cu răspunsul DELETE și pierde
+ * binarele. Citind din items[].binary am primi „PDF lipsă" pentru toate cele
+ * trei documente. $('...') accesează ieșirea oricărui nod, indiferent ce s-a
+ * întâmplat între timp. */
+const exportate = $('Export PDF (Drive)').all();
 const DOCUMENTE_DOCS = ${JSON.stringify(DOCUMENTE_DOCS)};
+if (exportate.length !== DOCUMENTE_DOCS.length) {
+  throw new Error('Export PDF a produs ' + exportate.length + ' fișiere, așteptam ' + DOCUMENTE_DOCS.length + '.');
+}
 
-/* Numele PDF-urilor vin din lista canonică de documente, NU din items[].json.
- * Motivul: nodurile HTTP dintre „Placeholder-e Docs" și acest nod (Drive copy,
- * batchUpdate, export, delete) înlocuiesc $json cu răspunsul lor — deci orice
- * metadată pusă acolo s-a pierdut. Poziția în items rămâne cea din
- * DOCUMENTE_DOCS, pentru că fiecare nod procesează itemii în ordine. */
 const fisiere = [];
 const numeTraf = new Set();
-for (let i = 0; i < items.length; i++) {
-  const item = items[i];
+for (let i = 0; i < exportate.length; i++) {
   const doc = DOCUMENTE_DOCS[i];
-  if (!doc) throw new Error('Mai mulți itemi decât documente: ' + items.length + ' > ' + DOCUMENTE_DOCS.length);
+  const binar = exportate[i].binary && exportate[i].binary.data;
+  if (!binar || !binar.data) throw new Error('PDF lipsă pentru ' + doc.doc_nume + '.pdf');
+  const buffer = Buffer.from(binar.data, 'base64');
+  if (buffer.length === 0) throw new Error('PDF gol pentru ' + doc.doc_nume + '.pdf');
   const nume = doc.doc_nume + '.pdf';
   numeTraf.add(nume);
-  if (!item.binary || !item.binary.data) throw new Error('PDF lipsă pentru ' + nume);
-  const buf = await this.helpers.getBinaryDataBuffer(item.pairedItem !== undefined ? item.pairedItem : 0, 'data');
-  fisiere.push({ nume, buffer: buf });
+  fisiere.push({ nume, buffer });
 }
-if (fisiere.length !== DOCUMENTE_DOCS.length) {
-  throw new Error('Se așteptau ' + DOCUMENTE_DOCS.length + ' PDF-uri, am primit: ' + fisiere.length);
-}
+if (numeTraf.size !== DOCUMENTE_DOCS.length) throw new Error('nume PDF duplicat în arhivă');
 const acum = new Date();
 const timp = (acum.getHours() << 11) | (acum.getMinutes() << 5) | (acum.getSeconds() >> 1);
 const data = (((acum.getFullYear() - 1980) & 0x7F) << 9) | ((acum.getMonth() + 1) << 5) | acum.getDate();
@@ -931,14 +934,26 @@ function evalueazaExpresie(expr, json, env) {
     destinatar: 'cumparator2@example.com',
     nume_client: kit[1].nume_fictiv
   };
-  const fakePdfs = ['raspuns-drive-1', 'raspuns-drive-2', 'raspuns-drive-3'].map((ceDa, i) => ({
-    json: { /* ce întoarce Google Drive, nu datele noastre */ id: 'COPIE_' + i, name: 'doc-' + i },
+  /* Ieșirea nodului „Export PDF (Drive)": 3 itemi, fiecare CU binar.
+   * Ieșirea nodului „Șterge Copia (Drive)" (ce sosește în ZIP prin items) e
+   * răspunsul DELETE — fără binar, pentru că un nod HTTP Request înlocuiește
+   * itemul. Simularea reproduce exact această realitate. */
+  const exportate = ['01-contract-vanzare-cumparare', '02-cerere-drpciv', '03-declaratii-fiscale'].map((nume, i) => ({
+    json: { documentId: 'COPIE_' + i },
     binary: { data: { data: Buffer.from('%PDF-1.7\n' + 'X'.repeat(1000 + i * 500)).toString('base64'), mimeType: 'application/pdf' } }
   }));
-  const helpersZip = { getBinaryDataBuffer: async (i, k) => Buffer.from(fakePdfs[i].binary.data.data, 'base64'), prepareBinaryData: async (buf, nume) => ({ data: buf.toString('base64'), fileName: nume, mimeType: 'application/zip' }) };
+  const fakePdfs = exportate.map(() => ({ json: { /* răspuns DELETE: fără binar */ ok: true } }));
+  /* getBinaryDataBuffer aruncă: ZIP-ul NU trebuie să caute binare în items,
+   * pentru că acolo nodul DELETE le-a pierdut. Dacă reintroduce această
+   * dependență, simularea o prinde imediat. */
+  const helpersZip = {
+    getBinaryDataBuffer: async () => { throw new Error('ZIP nu trebuie să citească binare din items — nodul DELETE le-a pierdut'); },
+    prepareBinaryData: async (buf, nume) => ({ data: buf.toString('base64'), fileName: nume, mimeType: 'application/zip' })
+  };
   const $mock = (nume) => {
-    if (nume !== 'Date Livrare') throw new Error('nod necunoscut în expresie: ' + nume);
-    return { first: () => ({ json: LIVRARE }) };
+    if (nume === 'Export PDF (Drive)') return { all: () => exportate };
+    if (nume === 'Date Livrare') return { first: () => ({ json: LIVRARE }) };
+    throw new Error('nod necunoscut în expresie: ' + nume);
   };
   const outZip = await simuleaza(nodZip.parameters.jsCode, { items: fakePdfs, helpers: helpersZip, $json: {}, $env: {}, $: $mock });
   const zipBuf = Buffer.from(outZip[0].binary.data.data, 'base64');
@@ -946,18 +961,19 @@ function evalueazaExpresie(expr, json, env) {
   const eocdCount = zipBuf.readUInt16LE(zipBuf.length - 22 + 10);
   assert(eocdCount === 3, 'ZIP Pachet: 3 intrări în arhivă — obținute: ' + eocdCount);
 
-  /* Nume de fișier: se citesc din lista canonică, nu din răspunsul Drive. */
-  const numeDinZip = [];
-  for (const p of fakePdfs) {
-    const nume = p.json.nume_pdf;
-    if (!nume) continue;
-    const offset = zipBuf.indexOf(Buffer.from(nome, 'utf8'));
-    if (offset !== -1) numeDinZip.push(nume);
-  }
-  assert(numeDinZip.length === 0 && zipBuf.includes(Buffer.from('01-contract-vanzare-cumparare.pdf', 'utf8')),
+  /* Nume de fișier: din lista canonică, nu din răspunsul Drive. */
+  assert(zipBuf.includes(Buffer.from('01-contract-vanzare-cumparare.pdf', 'utf8')),
     'ZIP Pachet: numele PDF-urilor vin din lista canonică (nu din răspunsul Drive, care le-a pierdut)');
   assert(zipBuf.includes(Buffer.from('02-cerere-drpciv.pdf', 'utf8')) && zipBuf.includes(Buffer.from('03-declaratii-fiscale.pdf', 'utf8')),
     'ZIP Pachet: toate cele 3 nume canonice apar în arhivă');
+  /* Conținutul: primul PDF exportat trebuie să fie primul în arhivă. */
+  /* indexOf dă poziția NUMELUI în arhivă; datele urmează imediat după el
+   * (30 de octeți de local header au fost deja adăugate la offset). */
+  const numePrima = '01-contract-vanzare-cumparare.pdf';
+  const offsetNume = zipBuf.indexOf(Buffer.from(numePrima, 'utf8'));
+  const continutPrima = zipBuf.subarray(offsetNume + Buffer.byteLength(numePrima, 'utf8'));
+  assert(continutPrima.subarray(0, 8).toString() === '%PDF-1.7',
+    'ZIP Pachet: conținutul e PDF-ul exportat, citit din nodul Export PDF (nu din items, unde nodul DELETE l-a pierdut)');
   assert(outZip[0].json.destinatar === 'cumparator2@example.com' && outZip[0].json.nume_client === kit[1].nume_fictiv,
     'ZIP Pachet: destinatarul și numele vin din nodul Date Livrare (nu din items[].json)');
   assert(outZip[0].binary.data.fileName === profil.id_tranzactie + '.zip',
@@ -968,10 +984,28 @@ function evalueazaExpresie(expr, json, env) {
   try {
     await simuleaza(nodZip.parameters.jsCode, {
       items: fakePdfs, helpers: helpersZip, $json: {}, $env: {},
-      $: () => ({ first: () => ({ json: {} }) })
+      $: (nume) => {
+        if (nume === 'Export PDF (Drive)') return { all: () => exportate };
+        return { first: () => ({ json: {} }) };
+      }
     });
   } catch (e) { faraLivrare = e.message; }
   assert(/destinatar/i.test(faraLivrare), 'ZIP Pachet: fără destinatar se oprește, nu livrează un ZIP fără cineva');
+
+  /* Exportul incomplet (un document lipsă sau răspuns neașteptat) se oprește
+   * înainte de a arde creditele Google pe un ZIP cu 2 de 3 fișiere. */
+  let exportIncomplet = '';
+  try {
+    await simuleaza(nodZip.parameters.jsCode, {
+      items: fakePdfs, helpers: helpersZip, $json: {}, $env: {},
+      $: (nume) => {
+        if (nume === 'Export PDF (Drive)') return { all: () => exportate.slice(0, 2) };
+        return { first: () => ({ json: LIVRARE }) };
+      }
+    });
+  } catch (e) { exportIncomplet = e.message; }
+  assert(/2 fișiere/i.test(exportIncomplet),
+    'ZIP Pachet: export incomplet (2 din 3) se oprește, nu arhivează un pachet lacună');
 
   /* (g) Date Livrare: destinatarul se ia din plată când dosarul nu-l are,
    * iar fără adresă fluxul se oprește cu un mesaj explicit (nu livrăm

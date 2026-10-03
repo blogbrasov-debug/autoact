@@ -399,14 +399,18 @@ Fișier: **`module-5/autoact-workflow-plati.json`** — generat de `node module-
   (responseFormat file) → `Șterge Copia` (fără gunoi în Drive) → `ZIP Pachet` (zip-store inline,
   CRC32 + STORE, zero npm) → `Gmail Livrare ZIP` (atașament + instrucțiuni). ID-urile șabloanelor
   vin din env: `GOOGLE_DOCS_TEMPLATE_CONTRACT/_DRPCIV/_DECLARATII`.
-  **Atenție la o capcană reală:** nodurile HTTP (Drive) *înlocuiesc* `$json` cu răspunsul lor, deci
-  orice metadată pusă înaintea lor (destinatar, nume, `nume_pdf`) se **pierde** până la `ZIP Pachet`.
-  De aceea ZIP-ul ia numele PDF-urilor din lista canonică `DOCUMENTE_DOCS` (poziția se păstrează,
-  fiindcă fiecare nod procesează itemii în ordine) și metadatele de livrare din `$('Date Livrare')`.
-  Fără destinatar, ZIP-ul **nu se construiește** — nu livrăm un pachet fără cineva.
-  Simularea din validator reproduce exact această pierdere (`items[].json` conține răspunsul Drive,
-  nu datele noastre), iar două mutații — întoarcerea la `items[0].json` și la `item.json.nume_pdf` —
-  fac validatorul să CADĂ, deci regresia nu poate trece neobservată.
+  **Atenție la o capcană reală:** nodurile HTTP (Drive) *înlocuiesc* itemul cu răspunsul lor, deci
+  până la `ZIP Pachet` se pierd **atât** metadatele puse înaintea lor (destinatar, nume, `nume_pdf`)
+  **cât și binarele** — `Șterge Copia (Drive)` este tot un HTTP Request, așa că în `items` ajunge
+  răspunsul DELETE, fără PDF. De aceea ZIP-ul citește **explicit** din `$('Export PDF (Drive)').all()`:
+  numele din lista canonică `DOCUMENTE_DOCS` (poziția se păstrează, fiindcă fiecare nod procesează
+  itemii în ordine) și **binarele de acolo**, iar metadatele de livrare din `$('Date Livrare')`.
+  Fără destinatar, ZIP-ul **nu se construiește** — nu livrăm un pachet fără cineva; la fel, un export
+  incomplet (2 din 3 PDF-uri) oprește fluxul înainte de a arde creditele Google pe un pachet lacună.
+  Simularea din validator reproduce exact această realitate (`items` conține răspunsul DELETE, iar
+  `helpers.getBinaryDataBuffer` **aruncă** ca să nu poată fi folosit pe furiș), iar patru mutații —
+  întoarcerea la `items[0].json`, la `item.json.nume_pdf`, la binarele din `items` și scoaterea
+  gardului de completitudine — fac validatorul să CADĂ, deci regresia nu poate trece neobservată.
 - **Auto-validările builder-ului (toate PASS):** structură JSON (22 noduri), graf conex
   (17 muchii, 18/18 accesibile), cele 3 ramuri IF, **sintaxa validată pentru TOATE cele 17
   expresii**, și — cele mai importante — **9 sabotaje reale ale semnăturii** fiecare simulate
