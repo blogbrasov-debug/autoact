@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ro">
+<html lang="ro" data-pret="49">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -200,6 +200,17 @@ main { max-width: 760px; margin: 0 auto; padding: 0 16px 48px; }
 /* ---------- Footer ---------- */
 footer { text-align: center; color: var(--text-slabit); padding: 24px 16px; font-size: .9em; }
 footer a { color: var(--text-slabit); }
+footer .nap { margin: 0 0 6px; line-height: 1.6; }
+footer .nap strong { color: var(--text); }
+
+/* ---------- Pagina de contact ---------- */
+.tabel-contact { width: 100%; border-collapse: collapse; }
+.tabel-contact th, .tabel-contact td { text-align: left; padding: 9px 0; border-bottom: 1px solid var(--bordura); vertical-align: top; }
+.tabel-contact th { width: 38%; font-weight: 600; color: var(--text); }
+details { border-bottom: 1px solid var(--bordura); padding: 10px 0; }
+details:last-of-type { border-bottom: none; }
+summary { cursor: pointer; font-weight: 600; }
+details p { margin: 8px 0 0; color: var(--text-slabit); }
 
 /* ---------- Responsive ---------- */
 @media (max-width: 560px) {
@@ -346,7 +357,11 @@ footer a { color: var(--text-slabit); }
   </main>
 
   <footer>
-    <p>AutoAct · autoact.ro · <a href="/termeni">Termeni și condiții</a> · <a href="/gdpr">GDPR</a></p>
+    <p class="nap">
+      <strong>AutoAct</strong> · CIF RO00000000 · Reg. Com. J00/000/0000<br>
+      Str. Exemplu 1, Sector 1, București · <a href="tel:+40 700 000 000">+40 700 000 000</a> · <a href="mailto:contact@autoact.ro">contact@autoact.ro</a>
+    </p>
+    <p><a href="/contact">Contact</a> · <a href="/termeni">Termeni și condiții</a> · <a href="/gdpr">GDPR</a></p>
   </footer>
 
   <script>
@@ -354,12 +369,30 @@ footer a { color: var(--text-slabit); }
  * Unicul fișier de editat la deploy.
  * WEBHOOK_URL = Production URL-ul nodului „Webhook UI" din workflow-ul n8n
  * (module-2/autoact-workflow.json): https://domeniul-tau.ro/webhook/test-ui
+ *
+ * NAP = Nume, Adresă, Punct de contact. Apare în footer, pe pagina de
+ * contact și în JSON-LD (Organization) — totul se generează din aici,
+ * deci nu se repetă nicăieri.
+ *
+ * ⚠ ATENȚIE LA DEPLOY: valorile NAP de mai jos sunt PLACEHOLDER.
+ * CIF-ul e validat structural de config-autoact.js (cifra de control),
+ * dar placeholder-ul NU e o firmă reală — înlocuiește-le înainte de
+ * lansare. Aceleași valori trebuie puse și în .env pe server:
+ * SMARTBILL_VAT_CODE=<NAP.CIF>, altfel factura iese cu alt CIF.
  */
 window.AUTOACT_CONFIG = {
   WEBHOOK_URL: 'https://autoact.ro/webhook/test-ui',
-  PRET_RON: 49
+  PRET_RON: 49,
+  NAP: {
+    DENUMIRE: 'AutoAct',
+    CIF: 'RO00000000',          // ← înlocuiește (placeholder)
+    REG_COM: 'J00/000/0000',    // ← înlocuiește (placeholder)
+    ADRESA: 'Str. Exemplu 1, Sector 1, București', // ← înlocuiește
+    TELEFON: '+40 700 000 000',  // ← înlocuiește
+    EMAIL: 'contact@autoact.ro',
+    SITE: 'https://autoact.ro'
+  }
 };
-
 </script>
   <script>
 /* ============================================================
@@ -495,7 +528,9 @@ window.AUTOACT_DEMO = {
 'use strict';
 
 (function () {
-  const cfg = window.AUTOACT_CONFIG || { WEBHOOK_URL: '', PRET_RON: 49 };
+  /* config.js e sursa reală a prețului; fallback-ul e doar pentru cazul
+   * în care config.js nu se încarcă (nu mai e o a doua cifră de întreținut). */
+  const cfg = window.AUTOACT_CONFIG || { WEBHOOK_URL: '', PRET_RON: Number(document.documentElement.dataset.pret) };
   const V = window.AUTOACT_VALIDARE;
 
   const $ = (sel) => document.querySelector(sel);
@@ -821,7 +856,7 @@ window.AUTOACT_DEMO = {
   $('#acord-client').addEventListener('change', actualizeazaTot);
 
   $('#btn-plata').addEventListener('click', async () => {
-    if (esteDemo) { alert('DEMO: aici s-ar deschide pagina de plată Netopia (3-D Secure) pentru 49 RON.'); return; }
+    if (esteDemo) { alert('DEMO: aici s-ar deschide pagina de plată Netopia (3-D Secure) pentru ' + cfg.PRET_RON + ' RON.'); return; }
     const payload = {
       id_tranzactie: raspunsCurent.id_tranzactie || null,
       acord_client: true,
@@ -858,16 +893,54 @@ window.AUTOACT_DEMO = {
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "Product",
-    "name": "Pachet acte transcriere auto — AutoAct",
-    "description": "Contract vânzare-cumpărare + cerere DRPCIV + declarații fiscale, generate automat din pozele actelor și livrate în PDF pe e-mail.",
-    "brand": { "@type": "Brand", "name": "AutoAct" },
-    "offers": {
-      "@type": "Offer",
-      "price": "49",
-      "priceCurrency": "RON",
-      "availability": "https://schema.org/InStock"
-    }
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "https://autoact.ro#organizatie",
+        "name": "AutoAct",
+        "url": "https://autoact.ro",
+        "vatID": "RO00000000",
+        "identifier": { "@type": "PropertyValue", "name": "Reg. Com.", "value": "J00/000/0000" },
+        "email": "contact@autoact.ro",
+        "telephone": "+40 700 000 000",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "Str. Exemplu 1, Sector 1, București",
+          "addressCountry": "RO"
+        },
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "contactType": "customer support",
+          "email": "contact@autoact.ro",
+          "telephone": "+40 700 000 000",
+          "availableLanguage": "ro"
+        }
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://autoact.ro#site",
+        "url": "https://autoact.ro",
+        "name": "AutoAct",
+        "inLanguage": "ro-RO",
+        "publisher": { "@id": "https://autoact.ro#organizatie" }
+      },
+      {
+        "@type": "Product",
+        "@id": "https://autoact.ro#pachet",
+        "name": "Pachet acte transcriere auto — AutoAct",
+        "description": "Contract vânzare-cumpărare + cerere DRPCIV + declarații fiscale, generate automat din pozele actelor și livrate în PDF pe e-mail.",
+        "brand": { "@id": "https://autoact.ro#organizatie" },
+        "inLanguage": "ro-RO",
+        "areaServed": { "@type": "Country", "name": "România" },
+        "offers": {
+          "@type": "Offer",
+          "price": "49",
+          "priceCurrency": "RON",
+          "availability": "https://schema.org/InStock",
+          "url": "https://autoact.ro"
+        }
+      }
+    ]
   }
   </script>
 </body>

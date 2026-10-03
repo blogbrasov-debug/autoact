@@ -1,7 +1,7 @@
 {
   "disclaimer": "Date 100% fictive, generate algoritmic pentru testare. Orice coincidenta cu persoane reale este intamplatoare. NU utiliza CNP-uri reale in medii de test.",
   "algoritm": "cheie 279146358279 | rest % 11 | rest 10 => cifra control 1",
-  "generat_la": "2026-09-26T08:20:50.396Z",
+  "generat_la": "2026-10-03T11:08:36.186Z",
   "intrari": [
     {
       "id_test": 1,

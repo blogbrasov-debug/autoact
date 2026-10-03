@@ -7,7 +7,9 @@
 'use strict';
 
 (function () {
-  const cfg = window.AUTOACT_CONFIG || { WEBHOOK_URL: '', PRET_RON: 49 };
+  /* config.js e sursa reală a prețului; fallback-ul e doar pentru cazul
+   * în care config.js nu se încarcă (nu mai e o a doua cifră de întreținut). */
+  const cfg = window.AUTOACT_CONFIG || { WEBHOOK_URL: '', PRET_RON: Number(document.documentElement.dataset.pret) };
   const V = window.AUTOACT_VALIDARE;
 
   const $ = (sel) => document.querySelector(sel);
@@ -333,7 +335,7 @@
   $('#acord-client').addEventListener('change', actualizeazaTot);
 
   $('#btn-plata').addEventListener('click', async () => {
-    if (esteDemo) { alert('DEMO: aici s-ar deschide pagina de plată Netopia (3-D Secure) pentru 49 RON.'); return; }
+    if (esteDemo) { alert('DEMO: aici s-ar deschide pagina de plată Netopia (3-D Secure) pentru ' + cfg.PRET_RON + ' RON.'); return; }
     const payload = {
       id_tranzactie: raspunsCurent.id_tranzactie || null,
       acord_client: true,

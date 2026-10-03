@@ -5,10 +5,20 @@
 # Toate valorile secrete vin din .env (generat de deploy-autoact.sh)
 # ============================================================
 
+# ============================================================
+# BUGET: VM A1 are 2 OCPU / 12 GB (limita redusă de Oracle la
+# 15 iunie 2026). Fără limite explicite, un container poate
+# prelua toată memoria și opri PostgreSQL + n8n împreună — pe un
+# server care nu poate fi extins fără plată. Repartizarea de mai
+# jos lasă ~4,5 GB pentru sistemul de operare și page cache.
+#verify=verifica-cost-0.js păstrează aceste limite sub plafon.
+# ============================================================
 services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    mem_limit: 3g
+    cpus: 0.5
     environment:
       - POSTGRES_USER=autoact
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -24,6 +34,8 @@ services:
   n8n:
     image: n8nio/n8n:latest          # imagine multi-arch: rulează nativ pe ARM64
     restart: unless-stopped
+    mem_limit: 4g                    # n8n ține execuțiile în RAM; îi revine partea cea mai mare
+    cpus: 1.0
     depends_on:
       postgres:
         condition: service_healthy
@@ -79,6 +91,8 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    mem_limit: 256m                  # proxy + TLS: nu are nevoie de mai mult
+    cpus: 0.25
     depends_on:
       - n8n
     ports:

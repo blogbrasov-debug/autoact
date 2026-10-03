@@ -1,16 +1,18 @@
 <!DOCTYPE html>
-<html lang="ro" data-pret="49">
+<!-- SABLON — nu edita site/index.html (se generează).
+     Tokenul de preț este înlocuit cu valoarea din site/config.js. -->
+<html lang="ro" data-pret="{{PRET_RON}}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AutoAct — Acte transcriere auto în 60 de secunde</title>
-  <meta name="description" content="Încarci pozele actelor, sistemul completează automat contractul, cererea DRPCIV și declarațiile fiscale. Verifici datele, plătești 49 RON, primești ZIP-ul instant.">
+  <meta name="description" content="Încarci pozele actelor, sistemul completează automat contractul, cererea DRPCIV și declarațiile fiscale. Verifici datele, plătești {{PRET_RON}} RON, primești ZIP-ul instant.">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="hero">
     <h1>Actele pentru transcriere auto, gata în 60 de secunde</h1>
-    <p class="hero-sub">Încarci pozele actelor · sistemul completează automat contractul, cererea DRPCIV și declarațiile fiscale · verifici datele · plătești <strong id="hero-pret">49 RON</strong> · primești ZIP-ul instant.</p>
+    <p class="hero-sub">Încarci pozele actelor · sistemul completează automat contractul, cererea DRPCIV și declarațiile fiscale · verifici datele · plătești <strong id="hero-pret">{{PRET_RON}} RON</strong> · primești ZIP-ul instant.</p>
   </header>
 
   <main>
@@ -135,15 +137,15 @@
         </label>
       </div>
 
-      <button type="button" id="btn-plata" class="btn btn-plata" disabled>PLĂTEȘTE 49 RON</button>
+      <button type="button" id="btn-plata" class="btn btn-plata" disabled>PLĂTEȘTE {{PRET_RON}} RON</button>
       <p class="hint centrat">Plată securizată Netopia 3-D Secure · primești ZIP-ul + factura pe e-mail în ~60 de secunde</p>
     </section>
   </main>
 
   <footer>
     <p class="nap">
-      <strong>AutoAct</strong> · CIF RO00000000 · Reg. Com. J00/000/0000<br>
-      Str. Exemplu 1, Sector 1, București · <a href="tel:+40 700 000 000">+40 700 000 000</a> · <a href="mailto:contact@autoact.ro">contact@autoact.ro</a>
+      <strong>{{DENUMIRE}}</strong> · CIF {{CIF}} · Reg. Com. {{REG_COM}}<br>
+      {{ADRESA}} · <a href="tel:{{TELEFON}}">{{TELEFON}}</a> · <a href="mailto:{{EMAIL}}">{{EMAIL}}</a>
     </p>
     <p><a href="/contact">Contact</a> · <a href="/termeni">Termeni și condiții</a> · <a href="/gdpr">GDPR</a></p>
   </footer>
@@ -163,48 +165,48 @@
     "@graph": [
       {
         "@type": "Organization",
-        "@id": "https://autoact.ro#organizatie",
-        "name": "AutoAct",
-        "url": "https://autoact.ro",
-        "vatID": "RO00000000",
-        "identifier": { "@type": "PropertyValue", "name": "Reg. Com.", "value": "J00/000/0000" },
-        "email": "contact@autoact.ro",
-        "telephone": "+40 700 000 000",
+        "@id": "{{SITE_URL}}#organizatie",
+        "name": "{{DENUMIRE}}",
+        "url": "{{SITE_URL}}",
+        "vatID": "{{CIF}}",
+        "identifier": { "@type": "PropertyValue", "name": "Reg. Com.", "value": "{{REG_COM}}" },
+        "email": "{{EMAIL}}",
+        "telephone": "{{TELEFON}}",
         "address": {
           "@type": "PostalAddress",
-          "streetAddress": "Str. Exemplu 1, Sector 1, București",
+          "streetAddress": "{{ADRESA}}",
           "addressCountry": "RO"
         },
         "contactPoint": {
           "@type": "ContactPoint",
           "contactType": "customer support",
-          "email": "contact@autoact.ro",
-          "telephone": "+40 700 000 000",
+          "email": "{{EMAIL}}",
+          "telephone": "{{TELEFON}}",
           "availableLanguage": "ro"
         }
       },
       {
         "@type": "WebSite",
-        "@id": "https://autoact.ro#site",
-        "url": "https://autoact.ro",
-        "name": "AutoAct",
+        "@id": "{{SITE_URL}}#site",
+        "url": "{{SITE_URL}}",
+        "name": "{{DENUMIRE}}",
         "inLanguage": "ro-RO",
-        "publisher": { "@id": "https://autoact.ro#organizatie" }
+        "publisher": { "@id": "{{SITE_URL}}#organizatie" }
       },
       {
         "@type": "Product",
-        "@id": "https://autoact.ro#pachet",
+        "@id": "{{SITE_URL}}#pachet",
         "name": "Pachet acte transcriere auto — AutoAct",
         "description": "Contract vânzare-cumpărare + cerere DRPCIV + declarații fiscale, generate automat din pozele actelor și livrate în PDF pe e-mail.",
-        "brand": { "@id": "https://autoact.ro#organizatie" },
+        "brand": { "@id": "{{SITE_URL}}#organizatie" },
         "inLanguage": "ro-RO",
         "areaServed": { "@type": "Country", "name": "România" },
         "offers": {
           "@type": "Offer",
-          "price": "49",
+          "price": "{{PRET_RON}}",
           "priceCurrency": "RON",
           "availability": "https://schema.org/InStock",
-          "url": "https://autoact.ro"
+          "url": "{{SITE_URL}}"
         }
       }
     ]

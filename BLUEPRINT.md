@@ -20,6 +20,11 @@
 | `module-2/test-pipeline-e2e.js` | Simulare END-TO-END a pipeline-ului: 35 verificări pe 4 scenarii (OCR fake degradat, Gemini fake, codurile nodurilor reale) |
 | `module-2/sabloane/` | Conținutul celor 3 șabloane Google Docs + harta canonică de 37 placeholder-e (`placeholders.json`) + README de setup |
 | `module-2/verifica-sabloane.js` | Verificare șabloane ↔ hartă ↔ profil demo (55 verificări) |
+| `config-autoact.js` | **Banca de cifre** — cititorul UNIC al prețului din `site/config.js`, pentru tot codul Node |
+| `site/test-banca-cifre.js` | Guard de conținut: nicio cifră în textul public fără origine în cod + NAP verificat prin egalitate cu config.js (56 verificări, 7 mutații de cifră + 5 de NAP) |
+| `config-autoact.js` | **Cititorul UNIC** al `site/config.js` pentru Node: preț + NAP + retenție GDPR, cu validarea cifrei de control a CIF-ului (cheia canonică 753217532) |
+| `site/index.sablon.html`, `site/contact.sablon.html` | Surse de editat ale paginilor (tokenuri `{{PRET_RON}}`, `{{CIF}}`…) — `.html`-urile se generează |
+| `site/contact.html` | Pagină de contact generată (NAP din config.js + FAQ) |
 | `site/` | Pagina statică Zero-Refund: chestionar + pre-vizualizare + demo standalone (vezi `site/README.md`) |
 | `module-3/docker-compose.yml` | Stack complet: n8n + PostgreSQL + Caddy (SSL automat) |
 | `module-3/caddy/Caddyfile` | Config Caddy: TLS Let's Encrypt + proxy spre n8n |
@@ -29,7 +34,9 @@
 | `module-5/plati-schema.sql` | Tabela `plati_procesate` (idempotency) + coloane adresă pentru facturare |
 | `module-5/build-workflow-plati.js` | Generatorul workflow-ului de plăți (rulare: `node module-5/build-workflow-plati.js`) |
 | `module-5/autoact-workflow-plati.json` | Workflow n8n importabil: Netopia → semnătură → idempotency → SmartBill → Docs ×3 → PDF → ZIP → Gmail (20 noduri) |
+| `module-5/test-e2e-idempotency.js` | **Scenariul 5+6 E2E contra PostgreSQL REAL** (container efemer, docker): idempotency pe `order_id` cu query-ul extras din workflow + efectul real al job-ului GDPR — 27 verificări |
 | `ruleaza-teste.sh` | Runner-ul unic al tuturor suitelor — folosit identic local și de CI |
+| `LAUNCH.md` | Planul de lansare: ordine cu dependențe, blocaje critice, rollback, checklist pre-GO (cifrele lui sunt verificate de `site/test-banca-cifre.js`) |
 | `.github/workflows/ci.yml` | CI GitHub Actions: suita completă la fiecare push și PR |
 
 ---
@@ -209,14 +216,14 @@ Fișier: **`module-2/autoact-workflow.json`** — generat de `node module-2/buil
 
 ## MODULE 3 — Ghid DevSecOps: n8n Self-Hosted pe Oracle Cloud Free Tier
 
-> **Sumar:** 1 VM Ampere A1 (4 vCPU / 24 GB RAM, Always Free) · VCN cu 2 Ingress Rules (80/443) · Docker Compose cu 3 servicii (n8n + PostgreSQL + Caddy) · un singur script de bootstrap + comenzi SSH esențiale.
+> **Sumar:** 1 VM Ampere A1 (2 OCPU / 12 GB RAM, Always Free) · VCN cu 2 Ingress Rules (80/443) · Docker Compose cu 3 servicii (n8n + PostgreSQL + Caddy) · un singur script de bootstrap + comenzi SSH esențiale.
 
 ### 3.1 Instanța Oracle Cloud (Always Free Tier) — pas cu pas
 
 1. **Cont:** cloud.oracle.com → „Start for free”. Cardul este pre-autorizat, nu debitat (verificare anti-abuz). Regiune recomandată: `eu-frankfurt-1` sau `eu-paris-1` (latență bună spre RO + date găzduite în UE → GDPR). *Regiunea se alege la creare și NU poate fi schimbată ulterior.*
 2. **Compartment** (opțional, pentru ordine): Console → Identity → Compartments → `autoact-prod`.
 3. **Instanța:** Compute → Instances → Create Instance.
-   - **Shape:** `VM.Standard.A1.Flex` (Ampere A1), **4 OCPU + 24 GB RAM** — întregul contingent Always Free (up to 4 OCPU / 24 GB total).
+   - **Shape:** `VM.Standard.A1.Flex` (Ampere A1), **2 OCPU + 12 GB RAM** — contingentul Always Free **în limita actuală**. ⚠️ Oracle a redus limita la 1.500 OCPU-ore / 9.000 GB-ore pe lună (2 OCPU / 12 GB) pe **15 iunie 2026**, fără anunț public. Un cont Free-only cu 4/24 este **oprit automat**; pe un cont PAYG poate genera **facturi fără știrea ta**. Nu depăși 2/12 — `verifica-cost-0.js` (pasul 13 din runner) verifică acest lucru la fiecare rulare.
    - **OS:** Ubuntu 22.04 LTS minimal (aarch64).
    - **SSH key:** încarci cheia publică la creare (obligatorie pentru pasul 3.3).
    - **Boot volume:** implicit ~47 GB (contingentul total Always Free: 200 GB block storage).
@@ -308,6 +315,8 @@ UPDATE tranzactii SET
   stare = 'epirat_gdpr', epirat_la = NOW()
 WHERE stare = 'livrat' AND livrat_la < NOW() - INTERVAL '48 hours';
 ```
+
+> **Bug prins și reparat prin rulare reală** (scenariul 6 din `module-5/test-e2e-idempotency.js`): CTE-ul `logare` făcea `RETURNING fisiere_sterse, tranzactii_epurate`, dar interogarea finală selecta `id_rulare` din el — `ERROR: column "id_rulare" does not exist`, deci job-ul GDPR ar fi aruncat eroare la **fiecare** rulare în producție. Corectat: `RETURNING id_rulare, ...`. Testul rulează acum job-ul pe date reale și verifică efectul (PII epurată, fișiere șterse, log scris), nu doar faptul că nu aruncă.
 
 Programare în n8n: nod **Schedule Trigger** (`0 4 * * *`) → nod **Postgres** (Operation: Execute Query) cu conținutul fișierului → nod **IF** (`row_count > 0`) → nod **Gmail** către `founder@autoact.ro` cu rezumatul „GDPR purge: N tranzacții epurate” (e-mail de audit, nu alertă de intervenție).
 
@@ -564,24 +573,50 @@ Interfața din acest modul este implementată funcțional, 100% statică (HTML/C
 - **Chestionar 5 pași** (§6.1) + **ecranul Zero-Refund** (§6.2): taburi cu buline ⚠/✗, câmpuri galbene editabile inline (prima editare le trece în „verificat"), câmpuri roșii blocante (validare locală CNP/VIN/plăcuță/serie), CNP validat devine read-only, checkbox-ul legal deblochează butonul de plată doar la `acord && galbene == 0 && rosii == 0`.
 - `site/validare.js` = aceiași validatori ca nodul n8n; compatibilitatea e garantată de două suite: `node verifica-ui-validare.js` (29/29) și `node module-2/test-cnp-validator.js` (90/90).
 - Consumă direct răspunsul nodului „Fallback Client" (`campuri_nesigure`, `cnp_erori`, `scor_calitate`, `mesaj_client`); acceptă și formatul nodului 5 (date la rădăcină).
-- **Demo fără server:** `node site/construieste-inline.js` → `site/demo-standalone.html` (single-file, CSS+JS inline — trimiți oricui, merge direct).
+- **Demo fără server:** `node site/construieste-inline.js` → `site/index.html` (din `index.sablon.html` + prețul din `config.js`) și apoi `site/demo-standalone.html` (single-file, CSS+JS inline — trimiți oricui, merge direct). **Se editează șablonul, nu `index.html`.**
 - **Deploy:** GitHub Pages / Netlify Drop / Cloudflare Pages / block Caddy pe serverul Oracle — tabel complet în `site/README.md`; singura editare la deploy: `WEBHOOK_URL` în `site/config.js`.
 
-### 9.1 CI — `ruleaza-teste.sh` + GitHub Actions
+### 9.1 Banca de cifre — un singur preț în tot proiectul
+
+Prețul (49 RON) era scris în **6 locuri**, dintre care unul singur era real (`site/config.js`). Celelalte erau copii care puteau să rămână în urmă la orice schimbare — și una dintre ele (`"price": "49"` din JSON-LD) e cea pe care Google o indexează, deci o cifră greșit acolo înseamnă preț greșit în SERP.
+
+Cum arată acum:
+
+| Unde | Cum ajunge valoarea |
+|---|---|
+| `site/config.js` | **sursa reală** |
+| `config-autoact.js` | `require('../config-autoact.js')` → valoarea extrasă din config.js; singurul mod prin care codul Node află prețul |
+| `site/index.sablon.html` | 5 tokenuri `{{PRET_RON}}`: `<html data-pret>`, meta description, hero, butonul de plată, JSON-LD |
+| `site/index.html` | **generat** de `construieste-inline.js` (devenit artefact, verificat la pasul 11) |
+| `site/demo-standalone.html` | generat din `index.html` |
+| `module-5/build-workflow-plati.js` | prețul din payload-ul SmartBill și condiția `IF suma === PRET` vin din `config-autoact.js` |
+| `site/app.js` | runtime, din `AUTOACT_CONFIG.PRET_RON` (fallback-ul citește tot din HTML-ul generat) |
+
+**Guard-ul de conținut** (`site/test-banca-cifre.js`, pasul 10 din runner → rulează și în CI) citește doar *textul public* — meta description, titlu, text vizibil, obiectul JSON-LD — și CADE dacă o cifră nu vine din cod și nu e excepție declarată:
+
+- **excepții cu motiv**: `9500` (placeholder de exemplu în câmpul prețului), `24` (prag legal scutire taxă), `60` (promisiunea „în 60 de secunde”);
+- **structurale** (nu se mai declară): numerotare de pași (1–9) și ani (1900–2100);
+- orice cifră legitimă nouă se **declară în `EXCEPTII` cu motiv**, nu se scrie direct în HTML.
+
+Testul se autoverifică prin 7 mutații (39 în buton, 39 în JSON-LD, 59 în meta, 129 nou, 90 de secunde, 12 pași, 12 luni) — fiecare trebuie să facă guard-ul să cadă, altfel testul pică el însuși.
+
+### 9.2 CI — `ruleaza-teste.sh` + GitHub Actions
 
 Un singur runner (`bash ruleaza-teste.sh`, ~100 s, zero dependențe npm) rulează **toate** suitele, în ordinea dependențelor:
 
-1. Sintaxă — 15 fișiere JS + scriptul de deploy (node --check / bash -n);
+1. Sintaxă — 20 fișiere JS + scriptul de deploy (node --check / bash -n);
 2. Scheme JSON — profil de tranzacție + harta placeholder-e;
 3. Test Data Kit — regenerat + reverificat;
 4. **Suita CNP — 90 verificări** (n8n + UI, output identic obligatoriu);
 5. **UI ↔ n8n — 29 verificări**;
 6. Profil demo — 6 verificări end-to-end;
 7. **Șabloane — 57 verificări** (tokeni, căi, harta nodului „Documente ZIP");
-8. **Builder-e workflow** — pipeline (15) + plăți (14) + site standalone;
+8. **Builder-e workflow** — pipeline (15) + plăți (23) + site (`index.html` din șablon + demo standalone);
 9. **Pipeline END-TO-END — 35 verificări pe 4 scenarii** (`test-pipeline-e2e.js`): execută workflow-ul REAL nod cu nod — codurile Code (Decodare, Validator, Documente ZIP), expresiile IF și responseBody evaluate generic, jsonBody-urile reale — cu OCR fake (text DEGRADAT din Test Data Kit: VIN cu „0→O", plăcuță minusculă fără liniuțe, nume în caps) și Gemini fake (aplică regulile din promptul real: O→0, normalizare plăcuță, case-fix). Scenarii: fericit (degradat→curățat→scor 100→plată→37 placeholder-e→Gmail), CNP corupt→fallback, 2 câmpuri nesigure→fallback, webhook incomplet→eroare. Testul a prins și reparat un bug real: expresia jsonBody Gemini era sintaxă JS invalidă (escaping prin heredoc) — builder-ul o compune acum programatic;
-10. Guard-uri: artefactele generate (`autoact-workflow.json`, `autoact-workflow-plati.json`, `demo-standalone.html`) trebuie să fie **la zi cu versiunea comisă** (în repo git) + `docker compose config` valid (dacă Docker există).
+10. **E2E cu PostgreSQL REAL — 27 verificări** (`module-5/test-e2e-idempotency.js`): pornește `postgres:16-alpine` efemer (fără porturi publicate), aplică **fișierele reale** `module-4/gdpr-purge.sql` apoi `module-5/plati-schema.sql`, apoi execută **query-ul de idempotency extras direct din `autoact-workflow-plati.json`** (placeholder-uri înlocuite): prima plată → `duplicat=0`, repetată → `duplicat=1`, 10 re-rulări → mereu exact 1 rând, 12 apeluri → 1 singur rând în DB (zero facturi duplicate), tranzacții diferite nu se blochează reciproc, iar status diferit pe același `order_id` **nu suprascrie** istoricul. **Scenariul 6** rulează job-ul GDPR pe date reale și verifică EFECTUL, nu sintaxa: PII epurată + `stare=epirat_gdpr` + suma păstrată, pragul 48h respectat, fișierele șterse, log de audit cu numere reale, al doilea rulaj nu epurează nimic. Prețul vine din `config-autoact.js`, deci testul rămâne sincronizat cu workflow-ul la orice schimbare de preț;
+11. **Banca de cifre + NAP + documente — 71 verificări** (`site/test-banca-cifre.js`): textul public nu conține nicio cifră fără origine în cod, JSON-LD / meta / buton coincid cu `config.js`, + 7 mutații care trebuie să facă guard-ul să cadă (§9.1);
+12. Guard-uri: artefactele generate (`autoact-workflow.json`, `autoact-workflow-plati.json`, `site/index.html`, `site/demo-standalone.html`) trebuie să fie **la zi cu versiunea comisă** (în repo git) + `docker compose config` valid (dacă Docker există).
 
 `.github/workflows/ci.yml` rulează același script la **fiecare push (toate branch-urile) și pe fiecare PR**, pe `ubuntu-latest` + Node 20, cu doar `actions/checkout@v4` + `actions/setup-node@v4`. În CI pașii 9 se activează complet (checkout creează repo-ul; Docker e preinstalat pe runner). Regula: ce trece local trece identic în CI.
 
-**✅ Final de blueprint. Toate scripturile menționate există pe disc și au fost testate (CNP: 5/5 valide + 90/90 în suita de regresie; ZIP: validat `unzip -t`; schema JSON: parsată OK; workflow n8n: 15/15 auto-validări; plăți: 14/14; UI: flux demo verificat interactiv; CI: suita completă rulată local, 9/9 pași). Deciziile finale (regiunea OCI, providerul de plăți, contabilul pentru TVA) aparțin Fondatorului.**
+**✅ Final de blueprint. Toate scripturile menționate există pe disc și au fost testate (CNP: 5/5 valide + 90/90 în suita de regresie; ZIP: validat `unzip -t`; schema JSON: parsată OK; workflow n8n: 15/15 auto-validări; plăți: 23/23; UI: flux demo verificat interactiv; banca de cifre: 71/71 (cifre + NAP + LAUNCH.md); PG real: 27/27 (idempotency + GDPR pe docker, rulat efectiv); CI: suita completă rulată local — pașii 1–11 PASS; pasul 12 (guard artefacte) cerut commitarea artefactelor regenerate: site/index.html, site/contact.html). Deciziile finale (regiunea OCI, providerul de plăți, contabilul pentru TVA) aparțin Fondatorului.**

@@ -97,7 +97,7 @@ anonimizate AS (
 logare AS (
   INSERT INTO gdpr_purge_log (fisiere_sterse, tranzactii_epurate)
   SELECT (SELECT COUNT(*) FROM fiz_de_sters), (SELECT COUNT(*) FROM anonimizate)
-  RETURNING fisiere_sterse, tranzactii_epurate
+  RETURNING id_rulare, fisiere_sterse, tranzactii_epurate
 )
 SELECT 'fisiere_sterse' AS metric, COUNT(*) AS valoare FROM fiz_de_sters
 UNION ALL

@@ -14,7 +14,7 @@
  *   7  IF Deja Procesată        (duplicat === 1 → true)
  *   8  Respond După             (ramura true → cod 200 „deja procesat")
  *   9  Data Tranzacție (PG)     (SELECT profil_json + coloane aplatizate)
- *  10  IF Plată Confirmată      (status === 'confirmed' && suma === 49)
+ *  10  IF Plată Confirmată      (status === 'confirmed' && suma === PREȚ)
  *  11  Respond Respins          (ramura false → cod 200 + status respins)
  *  12  Payload SmartBill        (Code: construiește factura din rândul tranzacției)
  *  13  SmartBill Factură        (HTTP POST Basic Auth → e-Factura automată)
@@ -35,6 +35,10 @@
  * Output:  module-5/autoact-workflow-plati.json
  * ============================================================ */
 'use strict';
+
+/* Prețul vine din SURSĂ (site/config.js) via config-autoact.js — nu mai e o cifră
+ * scrisă manual aici. Dacă schimbi prețul, schimbi config.js doar. */
+const { PRET_RON } = require('../config-autoact.js');
 
 /* ---------- Nodul 2: parsarea body-ului form-urlencoded Netopia ---------- */
 const PARSARE_BODY = `
@@ -224,7 +228,7 @@ const payload = {
   productName: 'Pachet acte transcriere auto — AutoAct',
   productDescription: 'Contract v-c + cereri DRPCIV + declarații fiscale (PDF/ZIP). TVA nu se percepe — regim simplificat (art. 282 ind. 2 C.fisc.).',
   quantity: 1,
-  price: 49,
+  price: ${PRET_RON},
   currency: 'RON',
   measuringUnit: 'buc',
   saveToDraft: false,
@@ -447,7 +451,7 @@ add({
       combinator: 'and',
       conditions: [
         { id: 'c-status', leftValue: '={{ $json.status }}', rightValue: 'confirmed', operator: { type: 'string', operation: 'equals' } },
-        { id: 'c-suma', leftValue: '={{ $json.suma }}', rightValue: 49, operator: { type: 'number', operation: 'equals' } }
+        { id: 'c-suma', leftValue: '={{ $json.suma }}', rightValue: PRET_RON, operator: { type: 'number', operation: 'equals' } }
       ]
     }
   }
@@ -771,7 +775,7 @@ function evalueazaExpresie(expr, json, env) {
   const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
   // pentru simularea REALĂ a nodului 3 folosim require adevărat (nu mock-ul) — ctxDecript e definit după ENV mai jos
   const MPAY_SECRET = 'secret-de-test';
-  const comanda = { order_id: 'tr_ab12cd34ef56ab12', amount: 49, currency: 'RON', status: 'confirmed', error_code: null };
+  const comanda = { order_id: 'tr_ab12cd34ef56ab12', amount: PRET_RON, currency: 'RON', status: 'confirmed', error_code: null };
   comanda.hash = crypto.createHmac('sha256', MPAY_SECRET).update([comanda.order_id, comanda.amount, comanda.currency, comanda.status].join('|')).digest('hex');
   const aesKey = crypto.randomBytes(48);
   const cipher = crypto.createCipheriv('aes-256-cbc', aesKey.subarray(16, 48), aesKey.subarray(0, 16));
@@ -793,7 +797,7 @@ function evalueazaExpresie(expr, json, env) {
     date_vehicul: { marca: 'Dacia', model: 'Logan', vin: kit[0].vin_fictiv, numar_inmatriculare: 'B-123-ABC', an_fabricatie: 2016, cilindree_cm: 1461, putere_kw: 55, masa_maxima_kg: 1730, odometru_km: 154000, tip_combustibil: 'motorina', certificat_inmatriculare_serie: 'AB123456' },
     date_tranzactie: { data_vanzarii: '2026-09-26', localitate_incheiere: 'Bucuresti', suma_ron: 9500, scutire_taxa_sub_24_luni: false }
   };
-  const outPh = await simuleaza(nodPh.parameters.jsCode, { $json: { profil_json: profil, id_tranzactie: profil.id_tranzactie, status: 'confirmed', suma: 49 }, $env: ENV_DOCS, items: [] });
+  const outPh = await simuleaza(nodPh.parameters.jsCode, { $json: { profil_json: profil, id_tranzactie: profil.id_tranzactie, status: 'confirmed', suma: PRET_RON }, $env: ENV_DOCS, items: [] });
   assert(outPh.length === 3, 'Placeholder-e Docs: 3 itemi (unul per document) — obținuți: ' + outPh.length);
   assert(outPh[0].json.requests.length === 37, 'Placeholder-e Docs: 37 replaceAllText per document — obținute: ' + outPh[0].json.requests.length);
   const hartaCanonica = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'module-2', 'sabloane', 'placeholders.json'), 'utf8')).placeholders;
@@ -847,7 +851,7 @@ function evalueazaExpresie(expr, json, env) {
     $env: { SMARTBILL_VAT_CODE: 'RO12345678', SMARTBILL_SERIE: 'AUTOACT' }
   });
   const p = outPayload[0].json.smartbill_payload;
-  assert(p.client.name === kit[1].nume_fictiv && p.client.vatCode === kit[1].cnp && p.price === 49 && p.eInvoice.sendEInvoice === true, 'SmartBill: payload corect din coloanele aplatizate');
+  assert(p.client.name === kit[1].nume_fictiv && p.client.vatCode === kit[1].cnp && p.price === PRET_RON && p.eInvoice.sendEInvoice === true, 'SmartBill: payload corect din coloanele aplatizate');
 
   console.log('');
   console.log('Output: ' + OUT);
