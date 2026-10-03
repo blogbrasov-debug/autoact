@@ -127,7 +127,7 @@ completată. **Completează `LEGAL` înainte de a încărca pagina.**
 | Fișier | Dimensiune | unde se pune |
 |---|---|---|
 | `facebook-profil.png` | 320×320 | fotografia de profil |
-| `facebook-acoperire.png` | 1640×624 | imaginea de acoperire |
+| `facebook-acoperire.png` | 1640×856 | imaginea de acoperire |
 | `facebook-post-durata.png` | 1080×1080 | postare „durează 60 de secunde" |
 | `facebook-post-proces.png` | 1080×1080 | postare despre proces |
 | `facebook-post-intrebare.png` | 1080×1080 | postare de întrebare |

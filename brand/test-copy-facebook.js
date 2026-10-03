@@ -213,6 +213,31 @@ for (const h of htmluri) {
     'rulează node brand/exporta-png.js');
 }
 
+/* Dimensiunile declarate în pagina.md trebuie să fie cele ale PNG-urilor
+ * REALE. Un tabel care spune 1640×624 în timp ce fișierul e 1640×856 nu
+ * strică nimic la upload — Facebook acceptă ambele — dar îl trimite pe
+ * om să caute o eroare care nu există, sau, mai rău, să „corecteze" un
+ * fișier bun ca să corespundă tabelului. */
+const paginaPtDimensiuni = path.join(FB, 'pagina.md');
+if (fs.existsSync(paginaPtDimensiuni) && fs.existsSync(PNG)) {
+  const sursaTabel = fs.readFileSync(paginaPtDimensiuni, 'utf8');
+  const randuri = [...sursaTabel.matchAll(/\|\s*`([^`]+\.png)`\s*\|\s*(\d+)\s*[x×]\s*(\d+)\s*\|/g)];
+  check(randuri.length > 0, 'pagina.md declară dimensiunile PNG-urilor în tabel');
+  for (const r of randuri) {
+    const f = path.join(PNG, r[1]);
+    if (!fs.existsSync(f)) {
+      check(false, 'pagina.md: ' + r[1] + ' există în brand/png/', 'fișierul lipsește — nu are ce încărca');
+      continue;
+    }
+    const b = fs.readFileSync(f);
+    const lat = b.readUInt32BE(16);
+    const inalt = b.readUInt32BE(20);
+    check(lat === Number(r[2]) && inalt === Number(r[3]),
+      'pagina.md: ' + r[1] + ' e ' + lat + '×' + inalt + ', exact cât scrie tabelul',
+      'tabelul spune ' + r[2] + '×' + r[3] + ' — cifră greșită, trimite omul să caute o eroare inexistentă');
+  }
+}
+
 /* ---------- 5. Textele de lipit încap în câmpurile Meta ---------- */
 
 /* Bio-ul e un câmp de 255 de caractere, iar Meta TAUCE tăcut peste
