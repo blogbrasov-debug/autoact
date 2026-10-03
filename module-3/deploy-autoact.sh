@@ -53,6 +53,31 @@ EOF
   exit 1
 fi
 echo "NAP folosit pe documente: CIF ${AUTOACT_CIF}$([ "$AUTOACT_PLACEHOLDER" = "true" ] && echo '  ⚠ PLACEHOLDER (permis explicit)')"
+
+# Blocaj pentru paginile legale: /termeni și /gdpr se generează din
+# site/config.js, dar două valori nu pot fi deduse din cod — data de la
+# care intră în vigoare termenii și instanțele. Cât timp sunt
+# „înlocuiește", paginile ar purta un marcaj vizibil, adică un site care
+# PARE să aibă termeni, dar îi are necompletați — mai rău decât să nu-i
+# aibă deloc. De aceea ne oprim aici, nu după ce ajung pe server.
+AUTOACT_LEGAL_PLACEHOLDER="$(cd "$PROJECT_DIR" && node -p 'require("./config-autoact.js").PLACEHOLDER_LEGAL')"
+if [ "$AUTOACT_LEGAL_PLACEHOLDER" = "true" ] && [ "${ALLOW_PLACEHOLDER_LEGAL:-0}" != "1" ]; then
+  cat >&2 <<EOF
+EROARE: paginile /termeni și /gdpr au valori necompletate.
+
+  LEGAL.DATA_ACCEPTARE: data de la care intră în vigoare termenii
+  LEGAL.INSTANTE:      instanțele în care se rezolvă disputele
+
+Publicate așa, paginile ar conține textul „înlocuiește…" — adică o
+declarație de conformitate care nu e completată, exact ce n-ar trebui
+să publicăm.
+
+Corectează blocul LEGAL din site/config.js și reia. Pentru un test de
+infrastructură, rulează cu ALLOW_PLACEHOLDER_LEGAL=1.
+EOF
+  exit 1
+fi
+[ "$AUTOACT_LEGAL_PLACEHOLDER" = "true" ] && echo "⚠ Termeni/GDPR: PLACEHOLDER (permis explicit)"
 DOMAIN="$2"
 REMOTE_DIR="~/autoact"
 

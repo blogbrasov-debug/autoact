@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Politica GDPR — AutoAct</title>
+  <meta name="description" content="Politica AutoAct conform GDPR: ce date personale prelucrăm, cine este operatorul, cei doi operatori subcontractori și cât timp le păstrăm. 48 de ore după livrare.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="hero">
+    <h1>Politica GDPR</h1>
+    <p class="hero-sub">Ce date luăm, cine le mai atinge și cât timp le păstrăm. Fără limbaj juridic inutil.</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>1. Cine e operatorul</h2>
+      <p>
+        AutoAct, CIF RO00000000, Registrul Comerțului J00/000/0000, sediul în Str. Exemplu 1, Sector 1, București.
+        Contact pentru drepturile tale: <a href="mailto:contact@autoact.eu">contact@autoact.eu</a>.
+      </p>
+      <p class="nota">Pagina a fost actualizată în <strong>2026-10-03</strong>. Unde se rezolvă disputele: înlocuiește: instanțele competente de la sediul firmei</p>
+    </section>
+
+    <section class="card">
+      <h2>2. Ce date prelucrăm și de ce</h2>
+      <p>Pentru a pregăti cele 3 documente, prelucrăm strict ce ai nevoie să le completăm:</p>
+      <table class="tabel-contact">
+        <tbody>
+          <tr><th scope="row">Fotografii</th><td>actul de identitate (CI sau pașaport), certificatul de înmatriculare (CIV), talonul</td></tr>
+          <tr><th scope="row">Date extrase</th><td>nume, CNP, serie și număr CI, adresă, număr de telefon, e-mail</td></tr>
+          <tr><th scope="row">Date vehicul</th><td>marca, modelul, VIN, număr de înmatriculare, an, tip combustibil</td></tr>
+          <tr><th scope="row">Date tranzacție</th><td>data vânzării, localitatea încheierii, suma, tranzacția identificată prin cod unic</td></tr>
+          <tr><th scope="row">Plată</th><td>datele procesate de Stripe pentru livrare; nu le păstrăm noi</td></tr>
+        </tbody>
+      </table>
+      <p><strong>Teme legal:</strong> executarea contractului de vânzare a serviciului și, pentru facturare, obligațiile legale de evidență contabilă.</p>
+      <p><strong>NU prelucrăm:</strong> date cu caracter special (ex. sănătate, religie, minori, orientare sexuală). Nu folosim profilare și nu luăm decizii automate în sensul art. 22 GDPR.</p>
+    </section>
+
+    <section class="card">
+      <h2>3. Cine mai atinge datele (operatori subcontractori)</h2>
+      <p>Nu trimitem nimic undeva „la o firmă de AI". Iată exact fiecare furnizor, cu rolul lui:</p>
+      <table class="tabel-contact">
+        <tbody>
+          <tr><th scope="row">OpenAI</th><td>recunoașterea optică a textului din fotografii (OCR). Primește doar imaginea trimisă de tine.</td></tr>
+          <tr><th scope="row">Google (Gemini)</th><td>corectarea și normalizarea textului citit: diacritice, formatul VIN-ului, al plăcuței.</td></tr>
+          <tr><th scope="row">Google (Drive și Docs)</th><td>șabloanele documentelor și generarea PDF-urilor. Șabloanele nu se modifică niciodată, se lucrează pe copii.</td></tr>
+          <tr><th scope="row">Google (Gmail)</th><td>livrarea pachetului de documente pe adresa ta de e-mail.</td></tr>
+          <tr><th scope="row">Stripe</th><td>procesarea plății și emiterea facturii cu TVA în numele nostru.</td></tr>
+          <tr><th scope="row">Oracle Cloud</th><td>găzduirea serverului (n8n și baza de date).</td></tr>
+        </tbody>
+      </table>
+      <p>Lista de mai sus nu este orientativă: ea este verificată automat de testul proiectului, care citește efectiv nodurile din workflow și cade dacă apare un furnizor care nu este aici.</p>
+    </section>
+
+    <section class="card">
+      <h2>4. Cât timp le păstrăm</h2>
+      <p><strong>48 de ore după livrare</strong> se șterg atât fișierele scanate, cât și datele personale din dosar. Curățarea rulează automat, în fiecare zi.</p>
+      <p><strong>72 de ore</strong> reprezintă termenul maxim în care se păstrează fotografiile unui dosar pentru care plata nu a venit. E suficient pentru a reveni la finalizare; după acest termen, se șterg și ele.</p>
+      <p>După epurare, din fiecare tranzacție rămân <strong>doar</strong>: codul tranzacției, suma și data vânzării. Nu sunt date cu caracter personal și nu permit identificarea vreunui om — sunt necesare doar pentru contabilitate.</p>
+      <p>Locul de plată și cel de livrare rămân la Stripe și la furnizorul de e-mail, după termenii lor proprii, asupra cărora nu avem control.</p>
+    </section>
+
+    <section class="card">
+      <h2>5. Drepturile tale</h2>
+      <p>Ai dreptul de acces, rectificare, ștergere, limitare, portabilitate și opoziție, plus dreptul de a retrage consimțământul. Le exerciți scriind la <a href="mailto:contact@autoact.eu">contact@autoact.eu</a>.</p>
+      <p>Răspundem în cel mult 30 de zile. Nu te costă nimic și nu e nevoie să motivezi cererea. Dacă ai o nemulțumire, ai și dreptul de a depune plângere la Autoritatea Națională de Supraveghere a Protecției Datelor Personale.</p>
+    </section>
+
+    <section class="card">
+      <h2>6. Securitatea</h2>
+      <p>Transportul este criptat (HTTPS, cu HSTS). Baza de date rulează local, în Docker, fără acces public. Serverul face parte din contul tifu, iar documentele trimise Stripe merg pe canalul lor criptat.</p>
+      <p>Nicio metodă nu e perfectă. Nu promitem că nu vor exista încălcări — promitem că ștergem datele tale la momentul stabilit mai sus și că nu le folosim în niciun alt scop.</p>
+    </section>
+
+    <section class="card">
+      <h2>7. Grupul de Facebook</h2>
+      <p>Grupul de pe Facebook este administrat de aceeași entitate. Nu postăm în el date personale și cerem membrilor să nu le posteze. Grupul nu este canal de suport pentru chestiuni fiscale — pentru acestea scrii la ANAF.</p>
+    </section>
+  </main>
+
+  <footer>
+    <p class="nap">
+      <strong>AutoAct</strong> · CIF RO00000000 · Reg. Com. J00/000/0000<br>
+      Str. Exemplu 1, Sector 1, București · <a href="tel:+40 700 000 000">+40 700 000 000</a> · <a href="mailto:contact@autoact.eu">contact@autoact.eu</a>
+    </p>
+    <p><a href="/">Acasă</a> · <a href="/contact">Contact</a> · <a href="/termeni">Termeni și condiții</a> · <a href="/gdpr">GDPR</a></p>
+  </footer>
+</body>
+</html>

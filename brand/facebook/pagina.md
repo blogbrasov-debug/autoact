@@ -77,6 +77,21 @@ Site: https://autoact.eu
 | **Cumpără acum** | → Payment Link-ul Stripe din `site/config.js` |
 | **Site web** | → `https://autoact.eu` |
 
+### Linkurile din secțiunea „Linkuri" — astea chiar se inspectează
+
+| Link | De ce |
+|---|---|
+| `https://autoact.eu` | site-ul principal |
+| `https://autoact.eu/termeni` | **Meta cere** ca o Pagină care colectează date (mesaje, cereri de înscriere în grup) să aibă termeni și o politică de confidențialitate **funcțională**. Linkul mort se penalizează, iar un utilizator care dă click și vede un 404 pleacă. |
+| `https://autoact.eu/gdpr` | politica de confidențialitate, cu cine procesează datele și cât timp le ține |
+| `https://autoact.eu/contact` | datele de contact complete |
+
+**Blocaj:** aceste două pagini se generează din [`site/config.js`](../../site/config.js),
+iar blocul `LEGAL` (data de aplicare + instanțele) e încă necompletat. De aceea
+`deploy-autoact.sh` se oprește înainte de server — publicate așa, paginile ar
+conține textul „înlocuiește…", adică o declarație de conformitate care nu e
+completată. **Completează `LEGAL` înainte de a încărca pagina.**
+
 **Ne ghidăm după claritatea butonului, nu după numărul lui.** Un buton
 „Cumpără acum" care ducele într-un Payment Link de sandbox ar trimite clientul
 într-un flux mort — deci **adaugă-l abia după ce Stripe e pe contul live**, nu

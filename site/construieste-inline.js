@@ -18,7 +18,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { PRET_RON, PRET_AFISAT, NAP, RETENTION_H } = require('../config-autoact.js');
+const { PRET_RON, PRET_AFISAT, NAP, RETENTION_H, LEGAL } = require('../config-autoact.js');
 
 const citeste = (f) => fs.readFileSync(path.join(__dirname, f), 'utf8');
 
@@ -33,7 +33,9 @@ const TOKENURI = {
   EMAIL: NAP.EMAIL,
   DENUMIRE: NAP.DENUMIRE,
   SITE_URL: NAP.SITE,
-  RETENTION_H: String(RETENTION_H)
+  RETENTION_H: String(RETENTION_H),
+  LEGAL_DATA_ACCEPTARE: LEGAL.DATA_ACCEPTARE,
+  LEGAL_INSTANTE: LEGAL.INSTANTE
 };
 
 /* ---------- 2. Randare pagini ---------- */

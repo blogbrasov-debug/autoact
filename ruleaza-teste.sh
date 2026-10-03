@@ -30,7 +30,7 @@ for f in \
   module-5/test-caddy-rutare.js \
   config-autoact.js \
   site/app.js site/validare.js site/config.js site/demo-data.js site/construieste-inline.js \
-  site/test-banca-cifre.js config-autoact.js \
+  site/test-banca-cifre.js site/test-mutatie-pagini-legale.js config-autoact.js \
   verifica-ui-validare.js \
   brand/construieste-identitate.js brand/exporta-png.js \
   brand/test-copy-facebook.js brand/test-mutatie-facebook.js
@@ -38,7 +38,7 @@ do
   node --check "$f"
 done
 bash -n module-3/deploy-autoact.sh
-echo "OK — 24 fișiere JS + 1 bash, sintaxă validă"
+echo "OK — 25 fișiere JS + 1 bash, sintaxă validă"
 
 pas "2/15 · Scheme JSON (Profil de Tranzacție + harta placeholder-e)"
 node -e "JSON.parse(require('fs').readFileSync('module-1/profil-tranzactie.schema.json','utf8')); console.log('profil-tranzactie.schema.json: VALID')"
@@ -70,8 +70,9 @@ node module-2/test-pipeline-e2e.js
 pas "10/15 · E2E cu PostgreSQL REAL (docker): idempotency pe order_id + job GDPR"
 node module-5/test-e2e-idempotency.js
 
-pas "11/15 · BANCA DE CIFRE — nicio cifră în textul public fără origine în cod"
+pas "11/15 · BANCA DE CIFRE — nicio cifră în textul public fără origine în cod (+ paginile legale + test de mutație)"
 node site/test-banca-cifre.js
+node site/test-mutatie-pagini-legale.js
 
 pas "12/15 · BUGET 0 RON — cerințele rămân în cotele Always Free (+ test de mutație)"
 node verifica-cost-0.js
@@ -86,7 +87,7 @@ node brand/test-mutatie-facebook.js
 
 pas "15/15 · Artefacte generate la zi + docker compose config"
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  for artefact in module-2/autoact-workflow.json module-5/autoact-workflow-plati.json site/index.html site/contact.html site/demo-standalone.html brand/png/facebook-acoperire.png brand/png/facebook-profil.png; do
+  for artefact in module-2/autoact-workflow.json module-5/autoact-workflow-plati.json site/index.html site/contact.html site/termeni.html site/gdpr.html site/demo-standalone.html brand/png/facebook-acoperire.png brand/png/facebook-profil.png; do
     if test -z "$(git status --porcelain -- "$artefact")"; then
       echo "OK  $artefact este la zi (identic cu versiunea comisă)"
     else

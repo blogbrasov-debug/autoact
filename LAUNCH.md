@@ -19,7 +19,7 @@
 | Site static + pagină de contact | ✅ generate din `site/*.sablon.html` |
 | Idempotency + GDPR contra PostgreSQL real | ✅ 27/27 pe Docker |
 | NAP (CIF, adresă, telefon) | ⚠️ **PLACEHOLDER** — blochează deploy-ul |
-| Pagini `/termeni` și `/gdpr` | ❌ **nu există** — linkuri moarte în footer |
+| Pagini `/termeni` și `/gdpr` | ✅ generate din `site/config.js` · blocaj: `LEGAL` necompletat |
 | Cont Stripe (sandbox) + produs 49 lei + „Managed Payments" | ✅ creat, plăți reale măsurate |
 | Cont Stripe **live** (Go live) | ❌ cere date personale + act de identitate |
 | Conturi externe (OpenAI, Gemini, Google) | ❌ de creat |
@@ -396,7 +396,7 @@ atât de mic. Grupul nu se poate programa nativ — se postează manual.
 | # | Blocaj | Cine decide | Când blochează |
 |---|---|---|---|
 | 1 | NAP placeholder (`RO00000000`) | Fondator | **deploy-ul se oprește** |
-| 2 | Pagini `/termeni` + `/gdpr` lipsă | Fondator + juridic | lansare publică |
+| 2 | `LEGAL` în `site/config.js` (data de aplicare + instanțe) | Fondator + juridic | publicarea paginilor legale |
 | 3 | Conturi Google (Docs + Gmail) | Fondator | pașii 2, 6, 7 |
 | 4 | 3 șabloane Google Docs create | Fondator | pasul 6 |
 | 5 | Cont Stripe **live** (date personale + act de identitate) | Fondator | pasul 7 (doar sandbox merge acum) |

@@ -427,6 +427,18 @@ window.AUTOACT_CONFIG = {
     WEBHOOK_URL_STRIPE: 'https://api.autoact.eu/webhook/stripe'
   },
 
+  /* Cele două lucruri pe care legea nu le poate deduce din cod și pe care
+ * numai fondatorul le poate decide: data de la care intră în vigoare
+ * termenii, și instanțele în care se rezolvă disputele. Sunt marcate ca
+ * PLACEHOLDER de aceeași manieră ca NAP-ul, pentru că o pagină de termeni
+ * fără dată și fără instanțe nu e o pagină de termeni — și nu trebuie
+ * publicată ca atare. Verificarea: site/test-banca-cifre.js CADE cât timp
+ * e vreo valoare de umplut aici. */
+  LEGAL: {
+    DATA_ACCEPTARE: '2026-10-03',  // ← înlocuiește cu data la care semnezi varianta finală
+    INSTANTE: 'înlocuiește: instanțele competente de la sediul firmei'
+  },
+
   NAP: {
     DENUMIRE: 'AutoAct',
     CIF: 'RO00000000',          // ← înlocuiește (placeholder)

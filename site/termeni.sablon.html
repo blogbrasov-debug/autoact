@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<!-- SABLON — nu edita site/termeni.html (se generează). -->
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Termeni și condiții — {{DENUMIRE}}</title>
+  <meta name="description" content="Termenii și condițiile serviciului {{DENUMIRE}}: pachet de 3 documente pentru transcriere auto, {{PRET_AFISAT}} cu TVA inclus. Ce livrăm, ce nu livrăm și ce drepturi ai.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="hero">
+    <h1>Termeni și condiții</h1>
+    <p class="hero-sub">Ce plătești, ce primești și ce nu acoperim. Fără clauze ascunse.</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>1. Cine vinde</h2>
+      <p>
+        {{DENUMIRE}}, CIF {{CIF}}, înregistrat la Registrul Comerțului sub {{REG_COM}},
+        cu sediul în {{ADRESA}}. Contact: <a href="tel:{{TELEFON}}">{{TELEFON}}</a> ·
+        <a href="mailto:{{EMAIL}}">{{EMAIL}}</a>.
+      </p>
+      <p class="nota">Documente încheiate: <strong>{{LEGAL_DATA_ACCEPTARE}}</strong>. Orice modificare se publică pe această pagină, cu data actualizată.</p>
+    </section>
+
+    <section class="card">
+      <h2>2. Ce vinzi și ce primești</h2>
+      <p>Serviciul este un pachet de <strong>3 documente</strong>, pregătite pentru înscrierea unui autoturism la DRPCIV:</p>
+      <ol>
+        <li>Contract de vânzare-cumpărare auto</li>
+        <li>Cerere de înregistrare la DRPCIV</li>
+        <li>Declarație fiscală de vânzare</li>
+      </ol>
+      <p>Prețul este <strong>{{PRET_AFISAT}}, TVA inclus</strong>. Un preț, un singur, fără abonament și fără costuri ascunse.</p>
+      <p>Factura fiscală este emisă de <strong>Stripe</strong>, în calitate de vânzător de drept („Merchant of Record”), și ți este trimisă automat. De aceea nu ai nevoie de CUI ca să cumperi.</p>
+    </section>
+
+    <section class="card">
+      <h2>3. Cum se încheie contractul</h2>
+      <p>Contractul de vânzare-cumpărare dintre cumpărător și vânzător se încheie cu documente obținute de la noi. Documentele pe care le livrăm sunt <strong>șabloane completate</strong>: ele poartă datele pe care le-ai confirmat, nu semnătura și nici garanții terților.</p>
+      <p>Noi <strong>nu</strong> suntem părți la contractul de vânzare dintre tine și cumpărătorul mașinii. Nu intermediem, nu negociem și nu răspundem pentru relația dintre voi.</p>
+    </section>
+
+    <section class="card">
+      <h2>4. Ce verificăm și ce nu</h2>
+      <p>Înainte să plătești, ți se arată toate datele extrase din actele tale, și poți corecta fiecare câmp. Doar după confirmarea ta se generează documentele.</p>
+      <p>Verificarea pe care o facem este <strong>matematică și de format</strong>: validitatea CNP-ului, corectitudinea VIN-ului și a plăcuței de înmatriculare, consistența cifrelor de control.</p>
+      <p>Nu verificăm și nu garantăm:</p>
+      <ul>
+        <li>acceptarea documentelor de funcționarul de la ghișeu — depinde de situația ta concretă;</li>
+        <li>verificări penale sau situații de maeștri pe care un document nu le poate evidenția;</li>
+        <li>faptul că mașina nu are datorii, litigii sau urmăriri.</li>
+      </ul>
+      <p><strong>Important:</strong> datele pe care le confirmi înainte de plată sunt declarația ta. O eroare în acele date nu poate fi corectată retroactiv și nu conduce la restituirea sumei — tocmai de aceea verificarea lor ți este pusă înainte, nu după plată.</p>
+    </section>
+
+    <section class="card">
+      <h2>5. Dreptul de retragere</h2>
+      <p>Acești termeni se aplică consumatorilor. Dreptul de retragere în 14 zile se acordă în limita și în condițiile stabilite de OUG 34/2014, inclusiv scutirea de acest drept atunci când serviciul a fost prestat integral înainte de expirarea termenului și ai cerut începerea executării.</p>
+      <p>Factibilitatea scutirii depinde de situația concretă și se stabilește împreună, înainte de plată, la <a href="mailto:{{EMAIL}}">{{EMAIL}}</a>. Nu promitem nimic în plus față de lege.</p>
+    </section>
+
+    <section class="card">
+      <h2>6. Plăți și anulare</h2>
+      <p>Plata se face pe {{SITE_URL}}, prin pagina de plată Stripe. Anularea unei tranzacții neplătite nu produce niciun cost.</p>
+      <p>Un dosar poate fi oprit înainte de plată oricând, fără urmări. După plată, dosarul intră în procesare și documentele sunt livrate conform celor confirmate.</p>
+    </section>
+
+    <section class="card">
+      <h2>7. Răspundere</h2>
+      <p>Răspunderea noastră este limitată la valoarea serviciului plătit ({{PRET_AFISAT}}). Nu răspundem pentru daune indirecte, pentru pierderi de profit sau pentru refuzul unui terț de a primi documentele.</p>
+      <p>Ne străduim ca datele citite din actele tale să fie corecte, dar acuratețea citirii automate depinde de lizibilitatea fotografiilor. Ecrul de verificare dinainte de plată este tocmai filtrul care transformă o citire imperfectă într-o corectare de către tine.</p>
+    </section>
+
+    <section class="card">
+      <h2>8. Forța majoră</h2>
+      <p>Suntem răspunzători doar cât timp serviciul depinde de noi. Interrupțiile rețelei, indisponibilitatea furnizorilor de plată sau a serviciilor terțe nu ne angajează.</p>
+    </section>
+
+    <section class="card">
+      <h2>9. Legea aplicabilă</h2>
+      <p>Prezentul contract se supune legii române. {{LEGAL_INSTANTE}}</p>
+    </section>
+
+    <section class="card">
+      <h2>10. Date personale</h2>
+      <p>Cum prelucrăm datele tale, cine le mai atinge și cât timp le păstrăm este în <a href="/gdpr">politica GDPR</a>. Pe scurt: le ștergem la {{RETENTION_H}} de ore după livrare.</p>
+    </section>
+  </main>
+
+  <footer>
+    <p class="nap">
+      <strong>{{DENUMIRE}}</strong> · CIF {{CIF}} · Reg. Com. {{REG_COM}}<br>
+      {{ADRESA}} · <a href="tel:{{TELEFON}}">{{TELEFON}}</a> · <a href="mailto:{{EMAIL}}">{{EMAIL}}</a>
+    </p>
+    <p><a href="/">Acasă</a> · <a href="/contact">Contact</a> · <a href="/termeni">Termeni și condiții</a> · <a href="/gdpr">GDPR</a></p>
+  </footer>
+</body>
+</html>

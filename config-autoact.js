@@ -114,8 +114,34 @@ const RETENTION_H = 48;
 const EXCEPTII_CIFRE = {
   9500: 'placeholder de exemplu în câmpul „Prețul de vânzare” (nu e prețul AutoAct)',
   24: 'prag legal — scutire taxă transcriere pentru mașini sub 24 de luni',
-  [RETENTION_H]: 'retenția GDPR promisă pe pagina de contact (verificată contra module-4/gdpr-purge.sql)'
+  [RETENTION_H]: 'retenția GDPR promisă pe pagina de contact (verificată contra module-4/gdpr-purge.sql)',
+  72: 'retenția maximă a dosarelor fără plată (verificată contra module-4/gdpr-purge.sql)',
+  14: 'termenul legal de retragere — norma consumatorului, nu o alegere comercială',
+  34: 'OUG 34/2014 — norma care reglementează dreptul de retragere al consumatorului',
+  22: 'art. 22 GDPR — deciziile automatizate',
+  30: 'termenul legal de răspuns la o cerere GDPR (luni)'
 };
+
+/* ---------- Termeni și GDPR: cele două decizii pe care legea nu le dictează ---------- */
+/* Citite tot din site/config.js, ca o pagină de termeni să nu poată avea
+ * altă dată sau altă instanță decât restul proiectului. */
+const LEGAL = {
+  DATA_ACCEPTARE: textUnic('LEGAL.DATA_ACCEPTARE', /DATA_ACCEPTARE\s*:\s*'[^']*'/g),
+  INSTANTE: textUnic('LEGAL.INSTANTE', /INSTANTE\s*:\s*'[^']*'/g)
+};
+/* Data trebuie să fie o zi calendaristică reală, pentru că se afișează
+ * public și nimeni nu mai poate verifica o dată care nu există. */
+if (!/^\d{4}-\d{2}-\d{2}$/.test(LEGAL.DATA_ACCEPTARE) || Number.isNaN(Date.parse(LEGAL.DATA_ACCEPTARE))) {
+  throw new Error('site/config.js: LEGAL.DATA_ACCEPTARE trebuie să fie o dată YYYY-MM-DD — este „' + LEGAL.DATA_ACCEPTARE + '”.');
+}
+if (!LEGAL.INSTANTE.trim()) throw new Error('site/config.js: LEGAL.INSTANTE e gol.');
+
+/* Un același lucru ca la NAP: cât timp e PLACEHOLDER, paginile /termeni
+ * și /gdpr NU pot fi publicate, pentru că nu spun data reală de la care
+ * se aplică și nici unde se rezolvă disputele. */
+const PLACEHOLDER_LEGAL =
+  /înlocuiește/i.test(LEGAL.DATA_ACCEPTARE) ||
+  /înlocuiește|\{\{/i.test(LEGAL.INSTANTE);
 
 /* ---------- Stripe: identificatorii reali, citiți din config.js ---------- */
 /* ID-urile sunt publice prin natura lor (Payment Link-ul apare în
@@ -165,5 +191,5 @@ if (!Number.isInteger(PRAG_REGULARIZARE) || PRAG_REGULARIZARE <= 0) {
 
 module.exports = {
   PRET_RON, PRET_AFISAT, NAP, PLACEHOLDER_NAP, RETENTION_H, EXCEPTII_CIFRE, CONFIG, CHEIE_CIF,
-  cifraControlCif, PROCESATOR_PLATI, PRAG_REGULARIZARE, STRIPE
+  cifraControlCif, PROCESATOR_PLATI, PRAG_REGULARIZARE, STRIPE, LEGAL, PLACEHOLDER_LEGAL
 };

@@ -39,7 +39,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { PRET_RON, PRET_AFISAT, NAP, PLACEHOLDER_NAP, RETENTION_H, EXCEPTII_CIFRE, cifraControlCif,
+const { PRET_RON, PRET_AFISAT, NAP, PLACEHOLDER_NAP, RETENTION_H, EXCEPTII_CIFRE, cifraControlCif, PLACEHOLDER_LEGAL,
         PROCESATOR_PLATI, PRAG_REGULARIZARE, STRIPE } = require('../config-autoact.js');
 
 const rad = (p) => path.join(__dirname, p);
@@ -156,7 +156,7 @@ function verifica(html, eticheta) {
 }
 
 /* ============ 1. Textul public al site-ului ============ */
-const PAGINI = ['index.html', 'contact.html', 'demo-standalone.html'];
+const PAGINI = ['index.html', 'contact.html', 'termeni.html', 'gdpr.html', 'demo-standalone.html'];
 const htmluri = {};
 for (const p of PAGINI) {
   const h = fs.readFileSync(rad(p), 'utf8');
@@ -165,7 +165,7 @@ for (const p of PAGINI) {
 }
 
 /* ============ 2. Șabloanele: nu conține cifre scrise manual ============ */
-const SABLOANE = ['index.sablon.html', 'contact.sablon.html'];
+const SABLOANE = ['index.sablon.html', 'contact.sablon.html', 'termeni.sablon.html', 'gdpr.sablon.html'];
 for (const p of SABLOANE) {
   const s = fs.readFileSync(rad(p), 'utf8');
   // fără tokenuri, orice cifră din TEXTUL PUBLIC al șablonului ar fi o
@@ -173,6 +173,27 @@ for (const p of SABLOANE) {
   const faraTokenuri = textPublic(s).replace(/\{\{[A-Z_]+\}\}/g, ' ');
   const nejust = cifreNejustificate(faraTokenuri, { mascheaza: false });
   ok(nejust.length === 0, 'site/' + p + ': nicio cifră scrisă manual în șablon (doar tokenuri)' + (nejust.length ? ' — ' + nejust.map((x) => x.cifra).join(', ') : ''));
+  /* NAP-ul nu se scrie niciodată cu mâna într-un șablon. O valoare
+   * copiată acolo trece neobservată de verificarea de mai sus (nu conține
+   * cifre „suspecte"), dar rămâne în pagină după ce schimbi NAP-ul în
+   * config.js — iar diferența nu o vede nimeni. */
+  for (const [cheie, valoare] of Object.entries(NAP)) {
+    /* DENUMIRE e exclus: numele de brand apare legitim în proză („AutoAct
+     * are nevoie de JavaScript”) și nu e o valoare care se poate
+     * desincroniza. Ceea ce trebuie să vină din token sunt IDENTIFICATORII:
+     * CIF-ul, adresa, telefonul, e-mail-ul — acelea care, copiate cu mâna,
+     * rămân în pagină după ce sunt schimbate în config.js. */
+    if (cheie === 'DENUMIRE') continue;
+    /* Nu se sare nici peste valorile placeholder: o valoare copiată cu
+     * mâna într-un șablon e greșită FIE că e fictivă, fie că e reală.
+     * Iar cât timp NAP-ul e placeholder, e tocmai momentul în care cineva
+     * copiază „Str. Exemplu 1" într-un șablon — adică fixează în pagină
+     * o adresă fictivă care va supraviețui completării ulterioare. */
+    if (!valoare) continue;
+    ok(!s.includes(valoare),
+      'site/' + p + ': NAP.' + cheie + ' vine din token, nu e scris cu mâna',
+      'valoarea „' + valoare + '” e copiată direct în șablon — se desincronizează de config.js');
+  }
   verifica(s, 'site/' + p);
 }
 const sablon = fs.readFileSync(rad('index.sablon.html'), 'utf8');
@@ -206,7 +227,15 @@ function problemeNap(h) {
   // orice adresă de stradă din TEXTUL PUBLIC trebuie să fie cea din config.js
   // (textPublic elimină CSS/JS inline, unde apar adrese de test)
   const adrese = textPublic(h).match(/\bStr\.[^·<|)"\n]+/g) || [];
-  for (const a of adrese) if (!NAP.ADRESA.includes(a.trim())) p.push('adresă straină: ' + a.trim());
+  /* După adresă urmează, în mod normal, punctuația frazei („…sediul în
+   * Str. Exemplu 1, București. Contact:”), care nu aparține adresei. De
+   * aceea se cere ca adresa găsită să ÎNCEAPĂ cu cea din config.js: asta
+   * prinde în continuare orice adresă reală straină, dar nu mai respinge
+   * proza care urmează după adresă. */
+  for (const a of adrese) {
+    const gasita = a.trim().replace(/[.,;:]+$/, '');
+    if (!gasita.startsWith(NAP.ADRESA) && !NAP.ADRESA.startsWith(gasita)) p.push('adresă straină: ' + gasita);
+  }
   return p;
 }
 
@@ -249,6 +278,126 @@ const sqlPurge = fs.readFileSync(path.join(__dirname, '..', 'module-4', 'gdpr-pu
 ok(sqlPurge.includes("INTERVAL '" + RETENTION_H + " hours'"),
   'retenția promisesă în pagină (' + RETENTION_H + 'h) e cea aplicată de module-4/gdpr-purge.sql');
 ok(contactHtml.includes(RETENTION_H + ' de ore'), 'site/contact.html: menționează retenția de ' + RETENTION_H + ' ore');
+
+/* ============ 1.bis Pagini legale: /termeni și /gdpr ============ */
+/* Le-am construit ca să nu mai existe linkuri moarte în footer — iar un
+ * link mort în footer-ul paginii de pe Facebook e exact genul de defect
+ * pe care nimeni nu-l mai repară după lansare. Dar o pagină de termeni
+ * greșită e mai rea decât una lipsă: de aceea fiecare cifră a lor trece
+ * prin aceeași bancă, iar câmpurile pe care legea nu le dictează sunt
+ * blocate cât timp sunt necompletate. */
+
+const termeniHtml = htmluri['termeni.html'];
+const gdprHtml = htmluri['gdpr.html'];
+
+/* NAP-ul apare prin tokenuri, nu scris de mână — altele două surse de
+ * adevăr pentru aceleași date, care se desincronizează imediat. */
+for (const [nume, h] of [['termeni.html', termeniHtml], ['gdpr.html', gdprHtml]]) {
+  ok(h.includes(NAP.CIF) && h.includes(NAP.REG_COM) && h.includes(NAP.TELEFON) && h.includes(NAP.EMAIL),
+    'site/' + nume + ': NAP-ul vine din config.js (CIF, reg. com., telefon, e-mail)');
+  ok(h.includes('href="/contact"') && h.includes('href="/gdpr"') && h.includes('href="/termeni"'),
+    'site/' + nume + ': footerul leagă paginile legale între ele și de contact');
+  ok(!/\{\{/.test(h), 'site/' + nume + ': niciun token neînlocuit');
+}
+
+/* Promisiunea de retenție trebuie să fie cea aplicată efectiv. Pagina GDPR
+ * vorbește despre DOUĂ termene (livrat / neplătit), iar ambele trebuie să
+ * existe în SQL — altfel pagina promite un prag pe care job-ul nu îl aplică. */
+const pragNeplata = 72;
+ok(sqlPurge.includes("INTERVAL '" + RETENTION_H + " hours'"),
+  'gdpr.html: termenul de după livrare (' + RETENTION_H + 'h) apare în module-4/gdpr-purge.sql');
+ok(sqlPurge.includes("INTERVAL '" + pragNeplata + " hours'"),
+  'gdpr.html: termenul pentru dosare fără plată (' + pragNeplata + 'h) apare în module-4/gdpr-purge.sql');
+ok(gdprHtml.includes(RETENTION_H + ' de ore') && gdprHtml.includes(pragNeplata + ' de ore'),
+  'site/gdpr.html: ambele termene de retenție apar în pagina, nu doar unul');
+ok(termeniHtml.includes(RETENTION_H + ' de ore'), 'site/termeni.html: menționează retenția de ' + RETENTION_H + ' ore');
+
+/* Lista de operatori subcontractori din gdpr.html nu poate fi o glosă:
+ * ea trebuie să fie extrasă din workflow-ul REAL. Afișăm un furnizor
+ * pe care nu-l folosim și ascundem unul pe care îl folosim înseamnă, în
+ * această pagină, o declarație greșită — iar o declarație greșită despre
+ * cine atinge datele personale e exact ce se urmărește. */
+const wfSubPlati = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'module-5', 'autoact-workflow-plati.json'), 'utf8'));
+const wfSubPipeline = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'module-2', 'autoact-workflow.json'), 'utf8'));
+const surseW = JSON.stringify([wfSubPlati, wfSubPipeline]);
+
+/* Direcția 1: ce declară pagina trebuie să existe și în cod. */
+const FURNIZORI_COD = [
+  { nume: 'OpenAI', dovada: /api\.openai\.com/ },
+  { nume: 'Gemini', dovada: /generativelanguage\.googleapis\.com/ },
+  { nume: 'Stripe', dovada: /buy\.stripe\.com/ },
+  { nume: 'Google', dovada: /googleapis\.com/ }
+];
+for (const f of FURNIZORI_COD) {
+  ok(f.dovada.test(surseW),
+    'site/gdpr.html: „' + f.nume + '” e operator subcontractor REAL — workflow-ul îl apelează');
+}
+ok(/n8n-nodes-base\.gmail/.test(surseW),
+  'site/gdpr.html: „Gmail” e operator subcontractor REAL — livrarea se face prin el');
+ok(/Oracle/i.test(fs.readFileSync(path.join(__dirname, '..', 'module-3', 'deploy-autoact.sh'), 'utf8')),
+  'găzduitorul Oracle există în deploy-ul real');
+ok(/Oracle/i.test(gdprHtml),
+  'site/gdpr.html: „Oracle Cloud” e declarat ca operator subcontractor',
+  'deploy-ul rulează pe Oracle, dar pagina nu îl declară — date care ajung la un operator nedeclarat');
+
+/* Direcția 2 — cea care contează: orice domeniu extern apelat efectiv
+ * trebuie să fie DECLARAT în pagină. Altfel pagina poate fi corectă
+ * pentru furnizorii pe care ne-am gândit, și totuși să omită pe cel
+ * nou — adică exact situația pe care GDPR o cere să nu se întâmple. */
+const DOMENII_DECLARATE = [
+  { domeniu: 'openai.com', cine: 'OpenAI' },
+  { domeniu: 'googleapis.com', cine: 'Google' },
+  { domeniu: 'stripe.com', cine: 'Stripe' }
+];
+const apeluriExterne = [...new Set((surseW.match(/https:\/\/[a-z0-9.-]+/g) || [])
+  .map((u) => u.replace('https://', '')))];
+for (const d of DOMENII_DECLARATE) {
+  if (d.domeniu === 'googleapis.com') continue; // verificat mai jos, prin generativelanguage
+  ok(apeluriExterne.some((h) => h.endsWith(d.domeniu)) && gdprHtml.includes(d.cine),
+    'site/gdpr.html: domeniul ' + d.domeniu + ' e apelat de workflow ȘI este declarat ca „' + d.cine + '”');
+}
+const domeniiNedeclarate = apeluriExterne.filter((h) =>
+  !DOMENII_DECLARATE.some((d) => h.endsWith(d.domeniu)) &&
+  h !== 'domeniul.ro' && h !== 'localhost' && !h.startsWith('127.0.0.1') && !h.startsWith('api.autoact') && !h.startsWith('autoact'));
+ok(domeniiNedeclarate.length === 0,
+  'site/gdpr.html: niciun domeniu extern apelat de workflow nu e nedecarat ca subcontractor',
+  'apelat dar neprecizat în pagină: ' + domeniiNedeclarate.join(', '));
+
+/* Cele două lucruri pe care legea nu le dictează. Cât timp sunt
+ * necompletate, paginile NU trebuie publicate — altfel publicăm termeni
+ * fără data de aplicare și fără instanțe, ceea ce e mai rău decât
+ * absența lor, pentru că pare conform. */
+/* Cele două lucruri pe care legea nu le dictează. Testul NU poate fi
+ * un blocaj, pentru că atunci nu s-ar mai putea livra cod în CI; dar nici
+ * nu poate fi o trecere tăcută. De aceea: consistența dintre config.js și
+ * pagina generată e verificare reală (cade dacă marcajul dispare din
+ * pagină în timp ce config-ul e necompletat), iar blocajul de publicare
+ * stă în deploy-autoact.sh, unde oprește înainte de server. */
+if (PLACEHOLDER_LEGAL) {
+  console.log('⚠ site/config.js: LEGAL.DATA_ACCEPTARE / LEGAL.INSTANTE sunt încă necompletate.');
+  console.log('  → /termeni și /gdpr NU pot fi publicate; deploy-autoact.sh se oprește.');
+}
+const marcajInPagina = (h) => /înlocuiește/i.test(h);
+ok(!PLACEHOLDER_LEGAL || marcajInPagina(termeniHtml),
+  'site/termeni.html: marcajul de necompletat e VIZIBIL în pagina generată (nu se poate rata)',
+  'marcajul a dispărut din pagină deși config.js e încă necompletat — publicarea ar fi tăcută');
+ok(!PLACEHOLDER_LEGAL || marcajInPagina(gdprHtml),
+  'site/gdpr.html: marcajul de necompletat e VIZIBIL în pagina generată (nu se poate rata)',
+  'marcajul a dispărut din pagină deși config.js e încă necompletat — publicarea ar fi tăcută');
+
+/* Deploy-ul trebuie să oprească înainte de server, exact ca la NAP. */
+const deployLegal = fs.readFileSync(path.join(__dirname, '..', 'module-3', 'deploy-autoact.sh'), 'utf8');
+ok(
+  /AUTOACT_LEGAL_PLACEHOLDER=.*PLACEHOLDER_LEGAL/.test(deployLegal) &&
+  deployLegal.includes('ALLOW_PLACEHOLDER_LEGAL:-0') &&
+  deployLegal.includes('EROARE: paginile /termeni și /gdpr'),
+  'deploy-autoact.sh are blocaj COMPLET pentru paginile legale (evaluare + excepție + mesaj + ieșire)'
+);
+ok(
+  deployLegal.indexOf('AUTOACT_LEGAL_PLACEHOLDER') > 0 &&
+  deployLegal.indexOf('AUTOACT_LEGAL_PLACEHOLDER') < deployLegal.indexOf('ssh "$SSH_TARGET"'),
+  'blocajul paginilor legale e evaluat înainte de prima conexiune SSH'
+);
 
 /* Deploy-ul trebuie să OPREASCĂ înainte de a atinge serverul dacă NAP-ul
  * e placeholder — altfel documentele oficiale pornesc cu CIF fictiv. */
