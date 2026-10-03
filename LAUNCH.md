@@ -1,7 +1,7 @@
 # AutoAct — Plan de lansare (LAUNCH.md)
 
 > Documentul care spune **în ce ordine** se pornește AutoAct și **ce blochează** fiecare pas.
-> Tot ce e în cod e testat automat (`bash ruleaza-teste.sh` — 14 pași, verde în CI).
+> Tot ce e în cod e testat automat (`bash ruleaza-teste.sh` — 15 pași, verde în CI).
 > Ce **nu** poate fi testat de cod e listat aici ca blocaj: conturi, secrete, decizii legale.
 
 **Promisiune de produs:** pachet acte transcriere auto în 60 s · 49 RON · cost operațional **0 RON**.
@@ -23,8 +23,12 @@
 | Cont Stripe (sandbox) + produs 49 lei + „Managed Payments" | ✅ creat, plăți reale măsurate |
 | Cont Stripe **live** (Go live) | ❌ cere date personale + act de identitate |
 | Conturi externe (OpenAI, Gemini, Google) | ❌ de creat |
-| Git remote + push | ✅ repo public `blogbrasov-debug/autoact`, suita de 14 pași verde în CI |
+| Git remote + push | ✅ repo public `blogbrasov-debug/autoact`, suita de 15 pași verde în CI |
 | Identitate vizuală Facebook (5 materiale la dimensiunile Meta) | ✅ generate în `brand/png/` |
+| Configurarea paginii + grupului Facebook | ✅ texte gata de lipit în `brand/facebook/` |
+| Gardul materialelor Facebook contra codului | ✅ 147 verificări + 6 mutații, pasul 14 |
+| Pagină și grup pe Meta | ❌ **nu create** — NAP-ul placeholder blochează publicarea cu date de contact |
+| Verificarea identității pe Meta (buletin) | ❌ **nefăcută** — checklist pregătit în `brand/facebook/verificare-meta.md` |
 
 ---
 
@@ -346,6 +350,47 @@ verifică automat. Ea ține până la primii bani, cu o condiție: **să nu
 atingi cotele**. Iar dacă vrei certitudine absolută, singura opțiune rămâne
 un card de plată legat la cont — Oracle nu notifică înainte de a taxa.
 
+## 2.ter Facebook — pagina, grupul și materialele care nu trebuie să mintă
+
+Tot ce e în `brand/facebook/` e **text gata de lipit**, nu îndrumări de
+scris: [`pagina.md`](brand/facebook/pagina.md), [`grup-clienti.md`](brand/facebook/grup-clienti.md),
+[`copy-postari-lansare.md`](brand/facebook/copy-postari-lansare.md),
+[`calendar-2-saptamani.md`](brand/facebook/calendar-2-saptamani.md) și
+[`verificare-meta.md`](brand/facebook/verificare-meta.md) — ultimul e
+checklist-ul pentru ziua în care vii cu actul de identitate și cardul.
+
+**De ce există un gard automat, nu doar texte bune.** La ClarTransfer textele
+de pe pagină promiseau un coridor de transfer care nu exista. S-au corectat
+în 5 minute, în postări — dar au rămas trei materiale grafice și o linie de
+calendar, pentru că **textul se rescrie deschizându-l, iar o imagine nu se
+corectează decât dacă cineva o redeschide**. De aceea
+`brand/test-copy-facebook.js` (pasul 14 al suitei) CADE pe fișier:
+
+| Ce verifică | Sursa de adevăr |
+|---|---|
+| orice „NN lei" / „NN RON" din materiale | `PRET_RON` din `site/config.js` |
+| orice „NN documente" | numărul real de șabloane din `module-2/sabloane/` |
+| promisiuni nesemnate („toate orașele", „în Europa"…) | lista scrisă în cod, cu motivul fiecăreia |
+| NAP-ul placeholder în textul de lipit | `NAP` din `site/config.js` |
+| PNG mai vechi decât sursa HTML | `brand/png/` vs `brand/*.html` |
+
+**Verificat prin 6 mutații reale** (`brand/test-mutatie-facebook.js`),
+nu doar prin „merge". Două dintre ele au prins găuri ale primei versiuni a
+gardului, nu doar erori în materiale: prețul greșit pus **în blocul de cod
+de lipit** trecea (deci bio-ul paginii nu era verificat deloc), iar o
+promisiune scrisă **fără diacritice** („orasele") trecea — deși textele de
+pe Facebook se scriu adesea așa.
+
+**De ce PNG-urile intră în verificare.** Materialul de pe pagină e PNG-ul,
+nu HTML-ul. Dacă editezi textul și uiți randarea, textul nou e „corect" în
+repo și nu-l vede nimeni nicăieri. Gardul cere `node brand/exporta-png.js`
+și comitarea PNG-ului regenerat.
+
+**Ce NU facem:** reclame, boost, Graph API. Postările sunt organice, prin
+Meta Business Suite (gratuit, 20 min – 29 zile în avans). Programarea prin
+API cere app review de 2–6 săptămâni și nu se justifică pentru un volum
+atât de mic. Grupul nu se poate programa nativ — se postează manual.
+
 ## 3. Blocaje critice — rezumat
 
 | # | Blocaj | Cine decide | Când blochează |
@@ -357,11 +402,12 @@ un card de plată legat la cont — Oracle nu notifică înainte de a taxa.
 | 5 | Cont Stripe **live** (date personale + act de identitate) | Fondator | pasul 7 (doar sandbox merge acum) |
 | 5.bis | `STRIPE_WEBHOOK_SECRET` în `.env` | Fondator | **nicio plată nu generează documente** |
 | 5.ter | Regim TVA confirmat cu contabilul | Contabil | înainte de 200 de comenzi |
- `autoact.eu` înregistrat (≈1,59 €) | Fondator | pasul 3 (fără domeniu, Caddy nu poate emite TLS) |
+| 6 | `autoact.eu` înregistrat (≈1,59 €) | Fondator | pasul 3 (fără domeniu, Caddy nu poate emite TLS) |
 | 7 | DNS `autoact.eu` → Pages, `api.autoact.eu` → VM | Fondator | pasul 3 (Caddy emite TLS doar cu DNS valid) |
 | 8 | `.env` de pe server salvat local | Fondator | **pierderea credential-urilor n8n** |
 | 9 | Cloudflare Pages: proiect creat, site publicat | Fondator | pasul 5 (site-ul rămâne local, nevizibil) |
 | 10 | Reclaim pe cont inactiv | Fondator | continuitate (vezi §2.bis) |
+| 11 | NAP placeholder — blochează și pagina Facebook | Fondator | publicarea pe Meta cu date de contact |
 
 ---
 
@@ -387,7 +433,7 @@ cp .env backup-env-local        # ⚠️ NU în git
 ## 5. Checklist înainte de GO
 
 - [ ] NAP complet în `site/config.js`, fără avertisment de placeholder la test
-- [ ] `bash ruleaza-teste.sh` verde (14/14 pași)
+- [ ] `bash ruleaza-teste.sh` verde (15/15 pași)
 - [ ] `/termeni` și `/gdpr` publicate și linkate
 - [ ] Conturi create, secrete introduse în n8n + `.env`
 - [ ] 3 șabloane Google Docs create, ID-urile în `.env`
