@@ -91,17 +91,21 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
-    mem_limit: 256m                  # proxy + TLS: nu are nevoie de mai mult
+    mem_limit: 256m                  # proxy + TLS + server de fișiere: nu are nevoie de mai mult
     cpus: 0.25
     depends_on:
       - n8n
     ports:
       - "80:80"                      # redirect HTTPS + challenge ACME
-      - "443:443"                    # singura poartă publică (UI n8n + webhook-uri)
+      - "443:443"                    # singura poartă publică (site + UI n8n + webhook-uri)
     environment:
       - DOMAIN=${DOMAIN}
+      # Site-ul e montat read-only: Caddy îl servește, nu îl scrie.
+      # Așa o pagină compromisă pe server nu poate rescrie artefactele.
+      - SITE_ROOT=/srv
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../site:/srv:ro              # site generat din *.sablon.html (index, contact, assets)
       - caddy_data:/data             # certificatele Let's Encrypt persistă la restart
       - caddy_config:/config
 

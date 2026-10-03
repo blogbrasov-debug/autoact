@@ -1,17 +1,60 @@
+# ============================================================
 # AutoAct | Modulul 3 | Caddyfile
-# TLS automat Let's Encrypt + reverse proxy spre n8n.
-# {$DOMAIN} este interpolat din variabila de mediu DOMAIN (docker-compose.yml).
+# TLS automat (Let's Encrypt) + site static + proxy spre n8n.
+#
+# {$DOMAIN}     domeniul public, din variabila de mediu DOMAIN
+# {$SITE_ROOT}  directorul containerului în care e montat site-ul
+# {$USE_LOCAL_CERTS}  doar pentru teste (CA intern, nu internet)
+#
+# ORDINEA blocurilor `handle` contează: Caddy le evaluează de sus în
+# jos și primul care se potrivește câștigă. De aceea `handle` e folosit
+# peste tot — un `file_server` liber ar intra în concurență cu blocurile
+# și ar putea servi fișierul static în loc de proxy.
+# ============================================================
 
 {
-	email support@autoact.ro
+	email {$ACME_EMAIL:support@autoact.ro}
+	local_certs {$USE_LOCAL_CERTS:false}
 }
 
 {$DOMAIN} {
-	encode gzip
+	encode gzip zstd
 
-	reverse_proxy n8n:5678 {
-		# n8n folosește WebSocket (editor) și SSE (execuții live) — fără buffering
-		flush_interval -1
+	# --- 1. API: doar webhook-urile n8n ---
+	# Restul domeniului e static. Nu inversez proxy-ul pe tot domeniul,
+	# pentru că atunci orice pagină ar cădea în n8n, iar interfața de
+	# administrare ar fi servită la rădăcina site-ului public.
+	@webhook path /webhook/*
+	handle @webhook {
+		reverse_proxy n8n:5678 {
+			# n8n folosește WebSocket (editor) și SSE (execuții live)
+			flush_interval -1
+		}
+	}
+
+	# --- 2. UI de administrare n8n, la cale explicită ---
+	# `basename` e obligatoriu: fără el, n8n generează link-uri absolute
+	# spre `/`, deci un refresh din editor ar scoate utilizatorul de pe
+	# /n8n și l-ar arăta interfața în locul site-ului.
+	handle /n8n/* {
+		reverse_proxy n8n:5678 {
+			flush_interval -1
+		}
+	}
+	redir /n8n /n8n/ 308
+
+	# --- 3. Site-ul public ---
+	handle {
+		root * {$SITE_ROOT}
+
+		# Cărute curate → fișierul .html cu același nume.
+		# Fără asta, /contact ar da 404 chiar dacă contact.html există.
+		@pagini path /contact /gdpr /termeni
+		rewrite @pagini {path}.html
+
+		file_server {
+			index index.html
+		}
 	}
 
 	header {
@@ -19,5 +62,13 @@
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		-Server
+		# HTML re-verificat des: un deployment nou trebuie să fie vizibil
+		# imediat, nu după ce expiră cache-ul unui vizitator.
+		Cache-Control "public, max-age=300"
 	}
+
+	# Fișierele de cod pot fi cache-uite mai mult, dar nu „imortal":
+	# după max-age se revalidează automat.
+	@static path *.css *.js *.svg *.png *.webp *.woff2
+	header @static Cache-Control "public, max-age=86400"
 }

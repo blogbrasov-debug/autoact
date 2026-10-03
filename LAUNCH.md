@@ -1,7 +1,7 @@
 # AutoAct — Plan de lansare (LAUNCH.md)
 
 > Documentul care spune **în ce ordine** se pornește AutoAct și **ce blochează** fiecare pas.
-> Tot ce e în cod e testat automat (`bash ruleaza-teste.sh` — 13 pași, verde în CI).
+> Tot ce e în cod e testat automat (`bash ruleaza-teste.sh` — 14 pași, verde în CI).
 > Ce **nu** poate fi testat de cod e listat aici ca blocaj: conturi, secrete, decizii legale.
 
 **Promisiune de produs:** pachet acte transcriere auto în 60 s · 49 RON · cost operațional **0 RON**.
@@ -88,11 +88,42 @@ cd module-3
 ./deploy-autoact.sh ubuntu@IP_PUBLIC_AUTOACT autoact.ro
 ```
 
-Scriptul: copiază compose + Caddyfile, generează `.env` cu secrete **aleatorii** pe server,
+Scriptul: copiază compose + Caddyfile + site-ul generat, generează `.env` cu secrete **aleatorii** pe server,
 configurează firewall-ul (80/443), instalează Docker, pornește stack-ul.
 **Blocaje:** regiunea OCI se alege o singură dată; A1 e frecvent „out of capacity" (reia, nu
 înlocui cu `E2.1.Micro`). **Backup obligatoriu:** `.env` (fără `N8N_ENCRYPTION_KEY` pierzi
 credential-urile).
+
+### Pasul 3.bis — Hosting și domeniu (decizia, cu motivul)
+
+**Hosting: Caddy pe același VM Oracle. Cost 0 RON, niciun cont nou, niciun serviciu cu plată.**
+
+| Variantă | Cost | Uz comercial | Conturi noi | Verdict |
+|---|---|---|---|---|
+| **Caddy pe același VM** | **0 RON** | nelimitat | **niciunul** | **ales** |
+| GitHub Pages | 0 RON | permis | cont GitHub | alternativă validă |
+| Cloudflare Pages | 0 RON | permis | cont Cloudflare | alternativă validă |
+| Vercel Hobby | 0 RON | **interzis** | cont Vercel | **exclus** |
+
+De ce Caddy pe același VM: site-ul e static și are nevoie de TLS, de aceea și de un server. Caddy
+e deja în stivă, pentru TLS-ul webhook-urilor. Punând și paginile în același loc, un singur
+domeniu deservește **site-ul și API-ul**, cu un singur certificat. Alternativele ar împărți
+domeniul în două destinații DNS și ar cere încă un cont — pentru un site de 3 pagini.
+
+Vercel Hobby e exclus pentru că planul e limitat explicit la proiecte **personale și
+necomerciale**, iar AutoAct vinde la 49 RON.
+
+**Domeniu: `0 RON` nu mai există.** Freenom a oprit înregistrările, iar operatorul `.tk` a ieșit
+din piață. Un domeniu costă câteva zeci de lei pe an — deci promisiunea e **0 RON operațional**,
+nu **0 RON de lansare**. Prefer să spun asta decât să promit ceva fals.
+
+| TLD | Cost/an | Cerință | Când |
+|---|---|---|---|
+| `.ro` | ~20–30 RON (cu TVA) | CUI/PFA al registrantului | după completarea NAP-ului |
+| `.com` | ~15–20 RON (cu TVA) | date de contact | imediat |
+
+**`.ro` cere CUI**, deci nu poate fi înregistrat cât timp NAP-ul e placeholder. Cu NAP real,
+`.ro` e alegerea bună pentru un client român care plătește — încredere maximă.
 
 ### Pasul 4 — Baza de date + workflow-uri (ordine fixă)
 
@@ -200,6 +231,7 @@ un card de plată legat la cont — Oracle nu notifică înainte de a taxa.
 | 4 | 3 șabloane Google Docs create | Fondator | pasul 6 |
 | 5 | Regim TVA confirmat | Contabil | prima factură |
 | 6 | DNS `autoact.ro` → VM | Fondator | pasul 3 (Caddy emite TLS doar cu DNS valid) |
+10 | Domeniu înregistrat | Fondator | pasul 3 (fără domeniu, Caddy nu poate emite TLS) |
 | 7 | `.env` de pe server salvat local | Fondator | **pierderea credential-urilor n8n** |
 | 8 | Git remote + push | Fondator | CI, istoric, backup |
 | 9 | Reclaim pe cont inactiv | Fondator | continuitate (vezi §2.bis) |
@@ -228,7 +260,7 @@ cp .env backup-env-local        # ⚠️ NU în git
 ## 5. Checklist înainte de GO
 
 - [ ] NAP complet în `site/config.js`, fără avertisment de placeholder la test
-- [ ] `bash ruleaza-teste.sh` verde (13/13 pași)
+- [ ] `bash ruleaza-teste.sh` verde (14/14 pași)
 - [ ] `/termeni` și `/gdpr` publicate și linkate
 - [ ] Conturi create, secrete introduse în n8n + `.env`
 - [ ] 3 șabloane Google Docs create, ID-urile în `.env`

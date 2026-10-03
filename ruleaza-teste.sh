@@ -13,7 +13,7 @@ cd "$(dirname "$0")"
 
 pas() { echo ""; echo "=================================================================="; echo "▶ $1"; echo "=================================================================="; }
 
-pas "1/13 · Sintaxă: toate modulele JS + scriptul bash de deploy"
+pas "1/14 · Sintaxă: toate modulele JS + scriptul bash de deploy"
 for f in \
   module-1/genereaza-cnp-test.js \
   module-1/populeaza-tranzactie-demo.js \
@@ -27,6 +27,7 @@ for f in \
   module-5/build-workflow-plati.js \
   module-5/test-e2e-idempotency.js \
   module-5/test-mutatie-cost.js \
+  module-5/test-caddy-rutare.js \
   config-autoact.js \
   site/app.js site/validare.js site/config.js site/demo-data.js site/construieste-inline.js \
   site/test-banca-cifre.js config-autoact.js \
@@ -37,44 +38,47 @@ done
 bash -n module-3/deploy-autoact.sh
 echo "OK — 20 fișiere JS + 1 bash, sintaxă validă"
 
-pas "2/13 · Scheme JSON (Profil de Tranzacție + harta placeholder-e)"
+pas "2/14 · Scheme JSON (Profil de Tranzacție + harta placeholder-e)"
 node -e "JSON.parse(require('fs').readFileSync('module-1/profil-tranzactie.schema.json','utf8')); console.log('profil-tranzactie.schema.json: VALID')"
 node -e "JSON.parse(require('fs').readFileSync('module-2/sabloane/placeholders.json','utf8')); console.log('placeholders.json: VALID')"
 
-pas "3/13 · Test Data Kit — 5 CNP-uri regenerate + re-verificate"
+pas "3/14 · Test Data Kit — 5 CNP-uri regenerate + re-verificate"
 node module-1/genereaza-cnp-test.js
 
-pas "4/13 · Suita CNP — 90 de verificări (n8n + UI, output identic obligatoriu)"
+pas "4/14 · Suita CNP — 90 de verificări (n8n + UI, output identic obligatoriu)"
 node module-2/test-cnp-validator.js
 
-pas "5/13 · Compatibilitate UI ↔ n8n — 29 de verificări"
+pas "5/14 · Compatibilitate UI ↔ n8n — 29 de verificări"
 node verifica-ui-validare.js
 
-pas "6/13 · Profil de Tranzacție demo — 6 verificări end-to-end"
+pas "6/14 · Profil de Tranzacție demo — 6 verificări end-to-end"
 node module-1/populeaza-tranzactie-demo.js
 
-pas "7/13 · Șabloane Google Docs — 57 de verificări (tokeni, căi, harta nodului)"
+pas "7/14 · Șabloane Google Docs — 57 de verificări (tokeni, căi, harta nodului)"
 node module-2/verifica-sabloane.js
 
-pas "8/13 · Builder-e workflow (pipeline + plăți) + site (pagini din șabloane + demo inline)"
+pas "8/14 · Builder-e workflow (pipeline + plăți) + site (pagini din șabloane + demo inline)"
 node module-2/build-workflow.js
 node module-5/build-workflow-plati.js
 node site/construieste-inline.js
 
-pas "9/13 · Pipeline END-TO-END: webhook→OCR fake→Gemini fake→validator→IF-uri→ZIP→Gmail"
+pas "9/14 · Pipeline END-TO-END: webhook→OCR fake→Gemini fake→validator→IF-uri→ZIP→Gmail"
 node module-2/test-pipeline-e2e.js
 
-pas "10/13 · E2E cu PostgreSQL REAL (docker): idempotency pe order_id + job GDPR"
+pas "10/14 · E2E cu PostgreSQL REAL (docker): idempotency pe order_id + job GDPR"
 node module-5/test-e2e-idempotency.js
 
-pas "11/13 · BANCA DE CIFRE — nicio cifră în textul public fără origine în cod"
+pas "11/14 · BANCA DE CIFRE — nicio cifră în textul public fără origine în cod"
 node site/test-banca-cifre.js
 
-pas "12/13 · BUGET 0 RON — cerințele rămân în cotele Always Free (+ test de mutație)"
+pas "12/14 · BUGET 0 RON — cerințele rămân în cotele Always Free (+ test de mutație)"
 node verifica-cost-0.js
 node module-5/test-mutatie-cost.js
 
-pas "13/13 · Artefacte generate la zi + docker compose config"
+pas "13/14 · Rutare Caddy REALĂ (docker): site static + proxy webhook + UI n8n + 404 + TLS"
+node module-5/test-caddy-rutare.js
+
+pas "14/14 · Artefacte generate la zi + docker compose config"
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   for artefact in module-2/autoact-workflow.json module-5/autoact-workflow-plati.json site/index.html site/contact.html site/demo-standalone.html; do
     if test -z "$(git status --porcelain -- "$artefact")"; then
