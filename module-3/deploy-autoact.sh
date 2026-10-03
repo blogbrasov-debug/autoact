@@ -105,6 +105,24 @@ if [ "$PAGINI_ONLINE" -lt 3 ]; then
 fi
 echo "    site sincronizat: ${PAGINI_ONLINE} pagini .html"
 
+# Verificare pe NUME, nu doar pe număr. Contorul de mai sus trece și în
+# cazul în care lipsește exact pagina care contează: de exemplu, dacă
+# /termeni sau /gdpr nu s-ar sincroniza, site-ul ar răspunde la /
+# (deci totul „pare" bine), dar linkul din footer și din secțiunea
+# „Linkuri" a paginii Facebook ar duce la 404 — exact defectul pe care
+# paginile legale tocmai l-au eliminat.
+for pagina in index contact termeni gdpr; do
+  if ! ssh "$SSH_TARGET" "test -f ${REMOTE_DIR}/site/${pagina}.html"; then
+    echo "EROARE: ${pagina}.html lipsește pe server."
+    echo "        Ruleaza 'node site/construieste-inline.js' si reia."
+    if [ "$pagina" = "termeni" ] || [ "$pagina" = "gdpr" ]; then
+      echo "        Linkul din footer și din pagina de Facebook ar da 404."
+    fi
+    exit 1
+  fi
+done
+echo "    pagini obligatorii prezente: index, contact, termeni, gdpr"
+
 echo "==> [2/5] Generez .env cu secrete aleatorii pe server..."
 # .env existent: nu îl suprascriu (secrete!). Cheile Stripe și cele Google se
 # completează MANUAL în conturile lor — nu pot fi generate. De aceea deploy-ul

@@ -399,6 +399,28 @@ ok(
   'blocajul paginilor legale e evaluat înainte de prima conexiune SSH'
 );
 
+/* Deploy-ul trebuie să verifice paginile pe NUME, nu doar să numere
+ * fișiere. Un contor trece și când lipsește exact pagina care contează:
+ * site-ul răspunde la /, deci totul „pare" bine, dar linkul din footer
+ * și din pagina de Facebook duce la 404. */
+const PAGINI_OBLIGATORII = ['index', 'contact', 'termeni', 'gdpr'];
+/* Se citește DOAR linia buclei — nu tot ce urmează. Altfel verificarea se
+ * mulțumea cu prezența cuvântului „termeni” în mesajul de eroare, în
+ * timp ce bucla nu mai verifica deloc pagina (a fost chiar o mutație
+ * nedetectată înainte de această corectare). */
+const liniaBucla = (deployLegal.match(/for pagina in [^\n]*; do/) || [''])[0];
+ok(liniaBucla !== '', 'deploy-autoact.sh are bucla care verifică paginile pe nume');
+for (const p of PAGINI_OBLIGATORII) {
+  ok(liniaBucla.includes(p),
+    'deploy-autoact.sh verifică explicit prezența paginii ' + p + '.html pe server',
+    'bucla verifică „' + liniaBucla + '” — nu și ' + p + ', deci o lipsă ar trece neobservată');
+}
+ok(/test -f/.test(deployPeNumeSauCeleBlock()), 'verificarea prezenței paginilor folosește „test -f" pe server');
+function deployPeNumeSauCeleBlock() {
+  const i = deployLegal.indexOf('for pagina in');
+  return i >= 0 ? deployLegal.slice(i, i + 400) : '';
+}
+
 /* Deploy-ul trebuie să OPREASCĂ înainte de a atinge serverul dacă NAP-ul
  * e placeholder — altfel documentele oficiale pornesc cu CIF fictiv. */
 const deploy = fs.readFileSync(path.join(__dirname, '..', 'module-3', 'deploy-autoact.sh'), 'utf8');

@@ -52,6 +52,11 @@ const MUTATII = [
     aplica: (t) => t.replace(/AUTOACT_LEGAL_PLACEHOLDER=.*\n/, '').replace(/if \[ "\$AUTOACT_LEGAL_PLACEHOLDER".*?\nfi\n/, '')
   },
   {
+    nume: 'verificarea prezenței paginilor pe server eliminată (doar numărătoare)',
+    fisier: path.join(RAD, 'module-3', 'deploy-autoact.sh'),
+    aplica: (t) => t.replace('for pagina in index contact termeni gdpr; do', 'for pagina in index; do')
+  },
+  {
     nume: 'marcajul de necompletat scos din pagină, config.js rămâne necompletat',
     fisier: path.join(RAD, 'site', 'gdpr.sablon.html'),
     aplica: (t) => t.replace(' Unde se rezolvă disputele: {{LEGAL_INSTANTE}}', '')
