@@ -28,7 +28,7 @@ indexat al paginii.
 sursă, `site/config.js`), iar Meta penalizează materialele care induc în
 răscumpărare. Prețul stă în bio și în [`grup-clienti.md`](grup-clienti.md).
 
-## 2. Bio (câmp scurt, 255 caractere) — 158 caractere
+## 2. Bio (câmp scurt, 255 caractere) — 199 caractere
 
 ```
 Pachet complet de acte pentru vânzarea mașinii între persoane fizice:

@@ -26,7 +26,7 @@
 | Git remote + push | ✅ repo public `blogbrasov-debug/autoact`, suita de 15 pași verde în CI |
 | Identitate vizuală Facebook (5 materiale la dimensiunile Meta) | ✅ generate în `brand/png/` |
 | Configurarea paginii + grupului Facebook | ✅ texte gata de lipit în `brand/facebook/` |
-| Gardul materialelor Facebook contra codului | ✅ 147 verificări + 6 mutații, pasul 14 |
+| Gardul materialelor Facebook contra codului | ✅ 151 verificări + 7 mutații, pasul 14 |
 | Pagină și grup pe Meta | ❌ **nu create** — NAP-ul placeholder blochează publicarea cu date de contact |
 | Verificarea identității pe Meta (buletin) | ❌ **nefăcută** — checklist pregătit în `brand/facebook/verificare-meta.md` |
 
@@ -374,7 +374,7 @@ corectează decât dacă cineva o redeschide**. De aceea
 | NAP-ul placeholder în textul de lipit | `NAP` din `site/config.js` |
 | PNG mai vechi decât sursa HTML | `brand/png/` vs `brand/*.html` |
 
-**Verificat prin 6 mutații reale** (`brand/test-mutatie-facebook.js`),
+**Verificat prin 7 mutații reale** (`brand/test-mutatie-facebook.js`),
 nu doar prin „merge". Două dintre ele au prins găuri ale primei versiuni a
 gardului, nu doar erori în materiale: prețul greșit pus **în blocul de cod
 de lipit** trecea (deci bio-ul paginii nu era verificat deloc), iar o

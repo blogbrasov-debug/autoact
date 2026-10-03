@@ -56,6 +56,8 @@ const MUTATII = [
     fisier: path.join(FB, 'pagina.md'),
     aplica: (t) => t.replace('## 2. Bio', '## 2. Bio\n\n```\nCIF: RO00000000\n```\n')
   },
+  { nume: 'cifra declarată pentru bio nu corespunde textului real', fisier: path.join(FB, 'pagina.md'),
+    aplica: (t) => t.replace('199 caractere', '158 caractere') },
   { nume: 'PNG mai vechi decât sursa HTML (editat HTML, uitat randarea)', special: 'png-vechi' }
 ];
 

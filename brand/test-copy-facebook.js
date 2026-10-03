@@ -213,6 +213,37 @@ for (const h of htmluri) {
     'rulează node brand/exporta-png.js');
 }
 
+/* ---------- 5. Textele de lipit încap în câmpurile Meta ---------- */
+
+/* Bio-ul e un câmp de 255 de caractere, iar Meta TAUCE tăcut peste
+ * limită: nu dă nicio eroare, doar taie textul la jumătate și
+ * afișează ceva ce nu ai vrut. De aceea lungimea lui se verifică
+ * aici, iar cifra se verifică CONTRA ei — altfel rămâne o cifră
+ * în care nu are voie să se creadă nimeni. */
+const paginaMd = documente.find((d) => path.basename(d) === 'pagina.md');
+if (paginaMd) {
+  const sursa = fs.readFileSync(paginaMd, 'utf8');
+  const declarat = sursa.match(/##\s*2\.\s*Bio[^\n]*—\s*(\d+)\s*caractere/);
+  const bio = (sursa.match(/##\s*2\.\s*Bio[^\n]*\n\n```\n([\s\S]*?)\n```/) || [])[1];
+  const LIMITA_BIO = 255;
+
+  check(!!bio, 'bio-ul paginii e identificabil în pagina.md (bloc de cod după „## 2. Bio")',
+    'gardul nu și-ar putea măsura ce urmează să măsoare');
+  if (bio) {
+    const lungime = bio.replace(/\s+/g, ' ').trim().length;
+    check(lungime <= LIMITA_BIO,
+      'bio-ul încape în câmpul de ' + LIMITA_BIO + ' caractere al Meta — are ' + lungime,
+      'Meta taie tăcut peste limită și afișează altceva decât ai vrut');
+    check(!!declarat, 'lungimea bio-ului e declarată în pagina.md (verificabilă, nu de încredere)',
+      'fără cifra declarată, numărul e doar o afirmație');
+    if (declarat) {
+      check(Number(declarat[1]) === lungime,
+        'cifra declarată pentru bio (' + declarat[1] + ') e cea reală (' + lungime + ')',
+        'cifra din document nu corespunde textului — s-a scris din memorie');
+    }
+  }
+}
+
 console.log('');
 console.log('brand/test-copy-facebook: ' + total + ' verificări · ' + esecuri + ' eșuate');
 if (esecuri > 0) {
