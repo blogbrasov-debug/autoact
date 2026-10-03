@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<title>AutoAct · foto de profil</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #dadce0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  .cadru { width: 320px; height: 320px; overflow: hidden; position: relative; background: #f8f9fa; }
+</style>
+</head>
+<body>
+  <div class="cadru">
+    <div style="width:100%;height:100%;background:linear-gradient(135deg,#1a73e8 0%,#1558b0 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;">
+      <div style="width:150px;height:150px;"><svg xmlns="http://www.w3.org/2000/svg" width="150" height="150" viewBox="0 0 512 512" role="img" aria-label="AutoAct">
+  <defs>
+    <linearGradient id="aa" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a73e8"/>
+      <stop offset="100%" stop-color="#1558b0"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#aa)"/>
+  <g transform="translate(0 0)">
+    <!-- actul: pagină cu colțul îndoiat -->
+    <path d="M150 116 L300 116 L362 178 L362 396 A20 20 0 0 1 342 416 L170 416 A20 20 0 0 1 150 396 Z"
+          fill="#ffffff" opacity="1"/>
+    <!-- colțul îndoiat -->
+    <path d="M300 116 L362 178 L318 178 A18 18 0 0 1 300 160 Z"
+          fill="#1558b0" opacity="0.28"/>
+    <!-- rândurile de text: actul e deja completat -->
+    <g stroke="#dadce0" stroke-width="13" stroke-linecap="round">
+      <line x1="196" y1="232" x2="316" y2="232"/>
+      <line x1="196" y1="278" x2="316" y2="278"/>
+    </g>
+    <!-- bifă: verificat -->
+    <circle cx="256" cy="352" r="56" fill="#188038"/>
+    <path d="M226 352 L248 374 L288 330" fill="none" stroke="#ffffff"
+          stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg></div>
+      <div style="color:#ffffff;font:700 30px/1 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;letter-spacing:.5px;">AutoAct</div>
+      <div style="color:#ffffff;opacity:.82;font:500 14px/1 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;letter-spacing:2.5px;text-transform:uppercase;">acte gata în 60s</div>
+    </div>
+  </div>
+</body>
+</html>

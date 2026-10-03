@@ -117,13 +117,38 @@ necomerciale**, iar AutoAct vinde la 49 RON.
 din piață. Un domeniu costă câteva zeci de lei pe an — deci promisiunea e **0 RON operațional**,
 nu **0 RON de lansare**. Prefer să spun asta decât să promit ceva fals.
 
-| TLD | Cost/an | Cerință | Când |
-|---|---|---|---|
-| `.ro` | ~20–30 RON (cu TVA) | CUI/PFA al registrantului | după completarea NAP-ului |
-| `.com` | ~15–20 RON (cu TVA) | date de contact | imediat |
+### Starea reală a numelui „AutoAct" — verificată
 
-**`.ro` cere CUI**, deci nu poate fi înregistrat cât timp NAP-ul e placeholder. Cu NAP real,
-`.ro` e alegerea bună pentru un client român care plătește — încredere maximă.
+Interogat pe 3 octombrie 2026 (DNS-over-HTTPS + RDAP, nu memorie):
+
+| Nume | Stare |
+|---|---|
+| **autoact.ro** | **LIBER** |
+| **autoact.eu** | **LIBER** |
+| autoact.com | ocupat (confirmat RDAP) |
+| autoact.org | ocupat (141.8.195.125) |
+| autoact.app | ocupat |
+
+### Recomandare: `.ro`, cu `.eu` ca rezervă
+
+| | `.ro` | `.eu` |
+|---|---|---|
+| Cost | 12 EUR + TVA/an (tarif oficial RoTLD); ~40 lei/an la registrar | de la $1.79 la înregistrare, reînnoire uzual $5–10 (~25–50 lei) |
+| Cerință | **CUI/PFA al registrantului** | firmă stabilită în UE sau cetățean UE — o firmă românească se încadrează |
+| Date cerute | complete + verificare RoTLD | complete, cu posibilă verificare ulterioară (EURid) |
+| Semnal pentru clientul RO | **maxim** | bun, dar mai vag |
+
+**Alege `.ro`.** Clientul plătește în RON, cu documente românești, într-un context în care
+`.ro` e extensia pe care o recunoaște imediat. Pentru cine plătește 49 RON către un serviciu
+necunoscut, domeniul e primul semn de încredere — iar `.eu` sugerează extindere europeană,
+care aici ar fi o promisiune pe care nu o poți onora.
+
+⚠️ **Ambele nume sunt libere *acum* și pot fi luate de oricine în orice moment.** Înregistrează
+cât ai nevoie de CUI; nu amâna până când totul e gata de lansat.
+
+**`.eu` ca rezervă** pentru cazul în care CUI-ul întârzie: îndeplinește cerința de „firmă
+stabilită în UE" și nu are condiția de CUI. Registrează-l în aceeași zi, într-un cont
+separat, ca să nu-l pierzi.
 
 ### Pasul 4 — Baza de date + workflow-uri (ordine fixă)
 
@@ -230,8 +255,7 @@ un card de plată legat la cont — Oracle nu notifică înainte de a taxa.
 | 3 | Conturi Netopia/SmartBill/Google | Fondator | pașii 2, 6, 7 |
 | 4 | 3 șabloane Google Docs create | Fondator | pasul 6 |
 | 5 | Regim TVA confirmat | Contabil | prima factură |
-| 6 | DNS `autoact.ro` → VM | Fondator | pasul 3 (Caddy emite TLS doar cu DNS valid) |
-10 | Domeniu înregistrat | Fondator | pasul 3 (fără domeniu, Caddy nu poate emite TLS) |
+| 6 | DNS `autoact.ro` → VM | Fondator | pasul 3 (Caddy emite TLS doar cu DNS valid)| 10 | Domeniu înregistrat (`.ro` + rezervă `.eu`) | Fondator | pasul 3 (fără domeniu, Caddy nu poate emite TLS) |
 | 7 | `.env` de pe server salvat local | Fondator | **pierderea credential-urilor n8n** |
 | 8 | Git remote + push | Fondator | CI, istoric, backup |
 | 9 | Reclaim pe cont inactiv | Fondator | continuitate (vezi §2.bis) |
