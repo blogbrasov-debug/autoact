@@ -266,7 +266,45 @@ check(zGzip > 0 && zGzip < home.marime,
   'răspunsul HTML e comprimat',
   'gzip=' + zGzip + ' bytes vs necomprimat=' + home.marime + ' (0 = conexiune eșuată)');
 
-/* ---------- 6. Curățenie ---------- */
+/* ---------- 6. Deploy-ul trebuie să trimită site-ul pe server ---------- */
+/* Fără sincronizare, Docker creează automat un director gol pentru
+ * sursa de montare: containerul pornește „cu succes", Caddy răspunde,
+ * iar toate paginile dau 404. E o eroare de deploy invizibilă în
+ * loguri — deci o verificăm aici, ca să nu se mai repete. */
+const deploy = fs.readFileSync(path.join(MODULE_3, 'deploy-autoact.sh'), 'utf8');
+
+/* Verificările se fac DOAR pe linii active. Altfel, o linie comentată
+ * cu „#" ar satisface orice regex — o mutație care dezactivează
+ * sincronizarea site-ului ar trece drept „cod valid”. */
+const deployActiv = deploy.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+
+check(/scp\s+-r\s+\.\.\/site/.test(deployActiv),
+  'deploy: sincronizează site-ul pe server (scp -r)',
+  'fără asta, sursa de montare lipsește, Docker creează director gol și paginile dau 404');
+check(/scp\s+docker-compose\.yml/.test(deployActiv) && /scp\s+caddy\/Caddyfile/.test(deployActiv),
+  'deploy: trimite compose + Caddyfile');
+
+/* Montarea din compose trebuie să corespundă directorului sincronizat. */
+const compose = fs.readFileSync(path.join(MODULE_3, 'docker-compose.yml'), 'utf8');
+check(/srv/.test(compose) && compose.includes('../site'),
+  'compose: site-ul e montat în /srv (read-only)',
+  'montare negăsită în docker-compose.yml');
+
+/* Verificarea de pe server trebuie să existe: e cea care oprește un
+ * deploy pe jumătate. Căutăm ASIGNAREA activă, nu orice apariție a
+ * numelui de variabilă — altfel referințele rămase în `if` ar trece. */
+const areVerificarePagini = /^\s*PAGINI_ONLINE=\$\(/m.test(deployActiv) &&
+  /PAGINI_ONLINE.*-lt/.test(deployActiv) &&
+  /exit 1/.test(deployActiv.slice(deployActiv.indexOf('PAGINI_ONLINE=$(')));
+check(areVerificarePagini,
+  'deploy: verifică numărul de pagini pe server și oprește dacă sunt prea puține',
+  'fără verificare, deploy-ul reușește tăcut cu un site gol');
+
+/* Fișierele de test și șabloanele nu au ce căuta pe server public. */
+check(/rm\s+-f.*site\/\*\.sablon\.html/.test(deployActiv),
+  'deploy: șterge de pe server șabloanele și testele (nu sunt de servit)');
+
+/* ---------- 7. Curățenie ---------- */
 curataza();
 
 console.log('');

@@ -56,9 +56,28 @@ DOMAIN="$2"
 REMOTE_DIR="~/autoact"
 
 echo "==> [1/5] Copiez fișierele de configurare pe server..."
-ssh "$SSH_TARGET" "mkdir -p ${REMOTE_DIR}/caddy"
+ssh "$SSH_TARGET" "mkdir -p ${REMOTE_DIR}/caddy ${REMOTE_DIR}/site"
 scp docker-compose.yml "${SSH_TARGET}:${REMOTE_DIR}/docker-compose.yml"
 scp caddy/Caddyfile "${SSH_TARGET}:${REMOTE_DIR}/caddy/Caddyfile"
+
+# Site-ul generat trebuie SINCRONIZAT, nu doar creat. Docker creează
+# automat un director gol dacă sursa de montare lipsește, deci fără
+# acest pas containerul ar porni „cu succes" și Caddy ar răspunde 404
+# pe toate paginile — o eroare de deploy invizibilă în loguri.
+# Excludem fișierele de test și șabloanele: nu sunt servite, iar
+# testul de bancă de cifre nu are ce căuta pe un server public.
+scp -r ../site/. "${SSH_TARGET}:${REMOTE_DIR}/site/"
+ssh "$SSH_TARGET" "rm -f ${REMOTE_DIR}/site/*.sablon.html ${REMOTE_DIR}/site/test-*.js ${REMOTE_DIR}/site/construieste-inline.js"
+
+# Verificare explicită: mai puțin de 3 pagini înseamnă că sincronizarea
+# a eșuat tăcut și site-ul nu va răspunde.
+PAGINI_ONLINE=$(ssh "$SSH_TARGET" "ls ${REMOTE_DIR}/site/*.html 2>/dev/null | wc -l")
+if [ "$PAGINI_ONLINE" -lt 3 ]; then
+  echo "EROARE: pe server sunt doar ${PAGINI_ONLINE} pagini .html (asteptam minim 3)."
+  echo "        Site-ul nu va raspunde. Ruleaza 'node site/construieste-inline.js' si reia."
+  exit 1
+fi
+echo "    site sincronizat: ${PAGINI_ONLINE} pagini .html"
 
 echo "==> [2/5] Generez .env cu secrete aleatorii pe server..."
 # .env existent: nu îl suprascriu (secrete!), dar RECONCILIEZ CIF-ul —
