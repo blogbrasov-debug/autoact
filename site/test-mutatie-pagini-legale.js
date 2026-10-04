@@ -19,6 +19,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { PLACEHOLDER_LEGAL } = require('../config-autoact.js');
 
 const RAD = path.join(__dirname, '..');
 const BANCA = path.join(__dirname, 'test-banca-cifre.js');
@@ -56,11 +57,17 @@ const MUTATII = [
     fisier: path.join(RAD, 'module-3', 'deploy-autoact.sh'),
     aplica: (t) => t.replace('for pagina in index contact termeni gdpr; do', 'for pagina in index; do')
   },
-  {
-    nume: 'marcajul de necompletat scos din pagină, config.js rămâne necompletat',
-    fisier: path.join(RAD, 'site', 'gdpr.sablon.html'),
-    aplica: (t) => t.replace(' Unde se rezolvă disputele: {{LEGAL_INSTANTE}}', '')
-  }
+  /* Doar cât timp LEGAL e încă necompletat are sens: mutația șterge
+   * rândul cu `înlocuiește…`, ca să dovedim că dispariția lui din pagină
+   * e prinsă. După completare (4 oct. 2026) textul nu mai există, deci
+   * mutația n-ar schimba nimic și ar „trece” fals. */
+  ...(PLACEHOLDER_LEGAL ? [
+    {
+      nume: 'marcajul de necompletat scos din pagină, config.js rămâne necompletat',
+      fisier: path.join(RAD, 'site', 'gdpr.sablon.html'),
+      aplica: (t) => t.replace(' Unde se rezolvă disputele: {{LEGAL_INSTANTE}}', '')
+    }
+  ] : [])
 ];
 
 let total = 0, esecuri = 0;

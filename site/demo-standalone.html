@@ -460,16 +460,17 @@ window.AUTOACT_CONFIG = {
     WEBHOOK_URL_STRIPE: 'https://autoact.eu/webhook/stripe'
   },
 
-  /* Cele două lucruri pe care legea nu le poate deduce din cod și pe care
- * numai fondatorul le poate decide: data de la care intră în vigoare
- * termenii, și instanțele în care se rezolvă disputele. Sunt marcate ca
- * PLACEHOLDER de aceeași manieră ca NAP-ul, pentru că o pagină de termeni
- * fără dată și fără instanțe nu e o pagină de termeni — și nu trebuie
- * publicată ca atare. Verificarea: site/test-banca-cifre.js CADE cât timp
- * e vreo valoare de umplut aici. */
+  /* Cele două lucruri pe care legea nu le poate deduce din cod: data de la
+ * care intră în vigoare termenii, și instanțele în care se rezolvă
+ * disputele. Data e cea de azi; instanțele sunt formula standard pentru un
+ * contract cu consumator — întâi judecătoria de la domiciliul părților, apoi
+ * tribunalul din circumscripție (NCPC, materie personală). Au fost
+ * completate la 4 oct. 2026, deci nu mai blochează deploy-ul.
+ * ⚠ DATA_ACCEPTARE: schimb-o dacă termenii se modifică ulterior — data e cea
+ * de la care versiunea curentă intră în vigoare. */
   LEGAL: {
-    DATA_ACCEPTARE: '2026-10-03',  // ← înlocuiește cu data la care semnezi varianta finală
-    INSTANTE: 'înlocuiește: instanțele competente de la sediul firmei'
+    DATA_ACCEPTARE: '2026-10-04',
+    INSTANTE: 'disputele se rezolvă la judecătoria de la domiciliul părților sau, după caz, de la locul de încheiere a contractului; pentru gradul de apel, la tribunalul din circumscripția teritorială a acelei judecătorii'
   },
 
   /* NAP = Nume, Adresă, Punct de contact. Apare în footer, pe pagina de
