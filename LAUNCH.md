@@ -18,7 +18,7 @@
 | Șabloane Google Docs (3 documente, 37 placeholder-e) | ✅ conținut redactat pe disc |
 | Site static + pagină de contact | ✅ generate din `site/*.sablon.html` |
 | Idempotency + GDPR contra PostgreSQL real | ✅ 27/27 pe Docker |
-| NAP (adresă, telefon) | ⚠️ **TELEFON placeholder** — adresa e completată |
+| NAP (adresă, telefon) | ✅ completat — Brașov + telefon real |
 | NAP CIF / Reg. Com. | ⬜ **opționale** — nepublicate cât timp sunt goale |
 | Pagini `/termeni` și `/gdpr` | ✅ generate din `site/config.js` · blocaj: `LEGAL` necompletat |
 | Cont Stripe (sandbox) + produs 49 lei + „Managed Payments" | ✅ creat, plăți reale măsurate |
@@ -59,18 +59,20 @@ costă mai mult decât timpul pierdut.
    [8] GO + prima comandă reală
 ```
 
-### Pasul 1 — NAP + decizii legale
+### Pasul 1 — NAP + decizii legale ✅ completat (4 oct. 2026)
 
-**Ce e obligatoriu azi:** doar `TELEFON` (placeholder acum) și `LEGAL.INSTANTE`. Adresa e completată.
+NAP-ul e completat (adresă Brașov, telefon) și paginile legale au dată + instanțe. **Nu mai blochează
+deploy-ul.** Cele rămase de mai jos sunt pentru funcționare, nu pentru publicare.
 
-1. Completează `TELEFON` din [`site/config.js`](site/config.js) cu numărul tău real.
-   GDPR art. 154 și OUG 34/2014 cer ca un site de vânzări să spună cine e vânzătorul și cum e de
-   contactat — un număr fictiv înseamnă o firmă care nu există pe un domeniu public.
+Telefonul apare în două forme: cu spații, ca să fie citibil (`+40 720 308 702`), și fără, în
+`href="tel:…"` (`tel:+40720308702`) — un URI cu spații nu e un URI, iar Android și iOS îl ignoră, deci
+apelul nu ar porni de pe mobil.
 
-2. Decide și completează paginile `/termeni` și `/gdpr` (vezi §2 — conținut legal, nu generat de cod).
+De mai jos rămâne de făcut pentru a **vinde** (nu pentru a publica):
 
-3. Decide regimul de TVA cu contabilul (serviciu către persoană fizică → scutire, art. 282 ind. 2
+1. Decide regimul de TVA cu contabilul (serviciu către persoană fizică → scutire, art. 282 ind. 2
    C.fisc. — **verifică**, nu presupune).
+2. Completează `LEGAL.INSTANTE` dacă se schimbă formula după o consultanță juridică.
 
 **Ce NU mai blochează: CIF-ul și Reg. Com.** Sunt opționale din 4 oct. 2026, pentru că cine ia banul de la
 client este **Stripe** (Managed Payments = Merchant of Record), care îi emite clientului factură. Lăsate

@@ -18,7 +18,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { PRET_RON, PRET_AFISAT, NAP, RETENTION_H, LEGAL } = require('../config-autoact.js');
+const { PRET_RON, PRET_AFISAT, NAP, NAP_PUBLICA, RETENTION_H, LEGAL } = require('../config-autoact.js');
 
 const citeste = (f) => fs.readFileSync(path.join(__dirname, f), 'utf8');
 
@@ -30,6 +30,7 @@ const TOKENURI = {
   REG_COM: NAP.REG_COM,
   ADRESA: NAP.ADRESA,
   TELEFON: NAP.TELEFON,
+  TELEFON_URI: NAP_PUBLICA.TELEFON_URI,
   EMAIL: NAP.EMAIL,
   DENUMIRE: NAP.DENUMIRE,
   SITE_URL: NAP.SITE,

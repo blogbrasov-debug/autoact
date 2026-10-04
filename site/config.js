@@ -127,7 +127,7 @@ window.AUTOACT_CONFIG = {
     CIF: '',                    // ← opțional: CUI de la ANAF (PFA)
     REG_COM: '',                // ← opțional: Registrul Comerțului
     ADRESA: 'Str. MICA 25, bl. 25, sc. C, ap. 13, Brașov',
-    TELEFON: '+40 720 000 000',  // ← înlocuiește cu numărul tău real
+    TELEFON: '+40 720 308 702',
     EMAIL: 'contact@autoact.eu',
     SITE: 'https://autoact.eu'
   }

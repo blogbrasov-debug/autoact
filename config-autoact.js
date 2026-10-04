@@ -157,6 +157,11 @@ const NAP_PUBLICA = {
   DENUMIRE: NAP.DENUMIRE,
   ADRESA: NAP.ADRESA,
   TELEFON: NAP.TELEFON,
+  /* Forma pentru `href="tel:…"`. Telefonul se afișeaz cu spații, pentru
+   * lizibilitate („+40 720 308 702”), dar un URI cu spații nu e un URI:
+   * Android și iOS îl ignoră și apelul nu pornește. Deci aceeași valoare,
+   * în două forme — una de citit, una de apelat. */
+  TELEFON_URI: NAP.TELEFON.replace(/[^\d+]/g, ''),
   EMAIL: NAP.EMAIL,
   SITE: NAP.SITE,
   CIF: CIF_PRESENT ? NAP.CIF : '',

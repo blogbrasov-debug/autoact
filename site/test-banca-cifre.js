@@ -230,7 +230,11 @@ function problemeNap(h) {
   const cifreCif = h.match(/\bRO\d{2,10}\b/g) || [];
   for (const c of cifreCif) if (c !== NAP_PUBLICA.CIF) p.push('CIF strain în pagină: ' + c);
   const telUri = h.match(/tel:([+\d\s()-]{6,})/g) || [];
-  for (const t of telUri) if (!t.includes(NAP.TELEFON)) p.push('telefon strain: ' + t);
+  /* Telefonul apare în două forme: afișat cu spații, apelat fără (vezi
+ * TELEFON_URI). Se verifică forma din URI, pentru că aceea e cea care
+ * contează în link — și pentru ca un telefon „strain” să fie prins și
+ * când vine fără spații. */
+for (const t of telUri) if (!t.includes(NAP_PUBLICA.TELEFON_URI)) p.push('telefon strain: ' + t);
   const mailUri = h.match(/mailto:([^\"'>]+)/g) || [];
   for (const m of mailUri) if (!m.includes(NAP.EMAIL)) p.push('e-mail strain: ' + m);
   // orice adresă de stradă din TEXTUL PUBLIC trebuie să fie cea din config.js
@@ -257,7 +261,7 @@ for (const [pagina, h] of Object.entries(htmluri)) {
 const contactHtml = htmluri['contact.html'];
 ok(contactHtml.includes(NAP.TELEFON) && contactHtml.includes(NAP.REG_COM), 'site/contact.html: telefonul și reg. com. din config.js apar în tabelul NAP');
 ok(/<h1>Contact<\/h1>/.test(contactHtml), 'site/contact.html: pagina de contact are titlu');
-ok(contactHtml.includes('mailto:' + NAP.EMAIL) && contactHtml.includes('tel:' + NAP.TELEFON), 'site/contact.html: legături mailto:/tel: pornite din config.js');
+ok(contactHtml.includes('mailto:' + NAP.EMAIL) && contactHtml.includes('tel:' + NAP_PUBLICA.TELEFON_URI), 'site/contact.html: legături mailto:/tel: pornite din config.js');
 
 /* ============ 4. schema.org: JSON-LD valid și NAP coerent ============ */
 const ldRaw = indexHtml.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1];
