@@ -12,13 +12,15 @@
  * contact și în JSON-LD (Organization) — totul se generează din aici,
  * deci nu se repetă nicăieri.
  *
- * ⚠ ATENȚIE LA DEPLOY: valorile NAP de mai jos sunt PLACEHOLDER.
- * CIF-ul e validat structural de config-autoact.js (cifra de control),
- * dar placeholder-ul NU e o firmă reală — înlocuiește-le înainte de
- * lansare. Aceleași valori trebuie puse și în contul Stripe (Settings →
- * Business → Tax code) și în .env pe server:
- * STRIPE_WEBHOOK_SECRET=<whsec_…>, altfel webhook-ul nu poate fi
- * verificat și niciun document nu se generează.
+ * ✅ NAP-ul e completat (4 oct. 2026): adresă de Brașov, telefon real.
+ * CIF-ul și Reg. Com. sunt singurele rămase opționale, iar necompletate
+ * sunt *nepublicate* (config-autoact.js → NAP_PUBLICA), deci nu apar nici
+ * ca locuri goale. Le pui aici când ai CUI de la ANAF și apar singure.
+ *
+ * ⚠ LA DEPLOY, secretul rămâne de pus: STRIPE_WEBHOOK_SECRET=<whsec_…>
+ * în .env pe server. Fără el, webhook-ul nu poate fi verificat și niciun
+ * document nu se generează — iar plaja nu dă nicio eroare, pentru că
+ * workflow-ul chiar nu știe dacă evenimentul e autentic.
  */
 window.AUTOACT_CONFIG = {
   WEBHOOK_URL: '',
