@@ -409,27 +409,32 @@ window.AUTOACT_CONFIG = {
    * tax_behavior inclus (preț cu TVA), iar codul fiscal de mai jos îl
    * face „Eligible".
    *
-   * ⚠ Atenție, corectat la 4 oct. 2026 după ce am citit formularul real
-   * din contul Stripe live: „NU e nevoie de CUI" era prea optimist. La
-   * business type în România există doar PFA, SRL și non-profit — deci
-   * CUI-ul se ia înaintea primei plăți. Ce aduce MoR rămâne valabil:
-   * factura către client o emite Stripe, nu tu.
+   * ⚠ Corectat la 4 oct. 2026, după ce am citit formularele reale:
+   * versiunea anterioară a acestui comentariu spunea că „CUI-ul se ia
+   * înaintea primei plăți”. Era FALS. Stripe scrie: „You must have a TIN
+   * (or government-issued ID number, if you are an individual or sole
+   * proprietor)…”, iar pentru România documentația lor listează CNP ca
+   * identificator național. Formularul „Tax information” cere explicit
+   * „CIF/CUI **or** Personal Numeric Code (CNP)”. Deci pentru un individ
+   * CNP-ul e suficient, iar PFA-ul nu e blocaj încasării. Ce aduce MoR
+   * rămâne valabil: factura către client o emite Stripe, nu tu.
    */
   PLATARI: {
     PROCESATOR: 'stripe',
     /* Pragul de DISCUȚIE cu contabilul (regim de TVA), nu data de la care
-     * devii legal. Citit din contul Stripe live (4 oct. 2026): la business
-     * type în România există doar `individual` (PFA / întreprinderea
-     * individuală), `company` (SRL) și `non_profit` — nu și „persoană
-     * fizică neînregistrată”. Deci prin Stripe nu se încasează nici o dată
-     * fără CUI: PFA-ul se ia înaintea primei plăți, iar pragul de mai jos
-     * rămâne întrebarea „trecem la sistem real sau nu?”. */
+     * devii legal și nici un blocaj tehnic. La business type în România
+     * există doar `individual` (PFA / întreprinderea individuală),
+     * `company` (SRL) și `non_profit` — dar alegerea business type-ului
+     * NU impune obținerea unui CUI înainte de încasare: pentru un
+     * individ, Stripe acceptă numărul de act de identitate (CNP) în
+     * loc de TIN. Pragul de mai jos rămâne întrebarea „trecem la
+     * sistem real sau nu?”, de discutat cu contabilul. */
     PRAG_COMENZI_REGULARIZARE: 200,
     /* Un singur comutator: suntem pe bani reali sau încă în test mode?
      * false → Payment Link-ul trebuie să fie de test și nicio pagină
      * livrată nu poate conține un link de plată (altfel un client ajunge
      * într-un flux de plată fals și nu mai știi dacă a plătit).
-     * true  → linkul trebuie să fie live (…/live_…).
+     * true  → linkul trebuie să fie live (fără prefixul `test_`).
      * Verificarea stă în config-autoact.js (verificaLegaturaStripe) și
      * e testată cu mutații în module-5/test-stripe-live.js.
      * Pașii de activare, cu IBAN cu tot: module-5/configurare-stripe-live.md */

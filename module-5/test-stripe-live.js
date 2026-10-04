@@ -53,6 +53,12 @@ const faraDiacritice = (s) =>
 const GhidPlin = faraDiacritice(Ghid);
 const contineFara = (ce) => GhidPlin.includes(faraDiacritice(ce));
 const areFara = (re) => re.test(GhidPlin);
+/* Aceiași doi helperi, dar pentru site/config.js. Fără ei, o verificare
+ * scrisă pentru ghid ar trece și când config-ul repetă concluzia veche —
+ * exact regresia de care ne apărăm. */
+const ConfigPlin = faraDiacritice(SRC_CONFIG);
+const contineConfig = (ce) => ConfigPlin.includes(faraDiacritice(ce));
+const areConfig = (re) => re.test(ConfigPlin);
 
 /* ---------- 1. Comutatorul LIVE vs Payment Link ---------- */
 /* Implementare independentă a regulii: dacă cineva șterge apelul din
@@ -119,6 +125,23 @@ ok(
 ok(
   !areFara(/nu se poate incerca/),
   'ghidul nu mai spune că nu se poate încasa fără CUI (ar fi fals: pentru un individ se poate)'
+);
+
+/* config.js e sursa pe care o citește omul INAINTE de a umple formularul
+ * Stripe. Dacă acolo apare din nou „nu se poate încasa fără CUI”, omul
+ * pleacă la ANAF crezând că e blocaj — exact regresia de azi, dar în alt
+ * fișier. De aceea verificăm și aici, nu doar în ghid. */
+ok(
+  !areConfig(/nu se poate incerca/) && !areConfig(/cui-ul se ia inaintea primei plat/),
+  'site/config.js nu spune din nou că nu se poate încasa fără CUI (cont fals pentru un individ)'
+);
+ok(
+  areConfig(/cnp/) && areConfig(/personal numeric code|cod numeric personal/),
+  'site/config.js spune și el care e identificatorul acceptat pentru un individ'
+);
+ok(
+  !/\.\.\/live_/.test(SRC_CONFIG) && contineFara('prefixul'),
+  'site/config.js nu mai repetă regula greșită „link live = …/live_…” (linkul live nu are prefix)'
 );
 
 /* CNP-ul e identificator personal: nu are ce căuta într-un fișier versionat,
