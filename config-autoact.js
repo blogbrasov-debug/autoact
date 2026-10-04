@@ -44,6 +44,18 @@ const textUnic = (eticheta, regex) => {
   return v;
 };
 
+/* La fel ca textUnic, dar acceptă valoarea goală — pentru câmpurile care
+ * au devenit opționale (CIF, REG_COM). Regula rămâne aceeași: valoarea
+ * trebuie să apară EXACT o dată în config; doar absența ei e permisă,
+ * pentru că e o alegere explicită („fără CUI”), nu o valoare uitată. */
+const textOptional = (eticheta, regex) => {
+  const gasite = SRC.match(regex) || [];
+  if (gasite.length !== 1) {
+    throw new Error('site/config.js: așteptam exact o apariție pentru ' + eticheta + ', am găsit ' + gasite.length + '.');
+  }
+  return gasite[0].match(/:\s*'([^']*)'/)[1];
+};
+
 /* ---------- Prețul: o singură față, în lei, TVA inclus ---------- */
 /* Decizia (3 oct. 2026, măsurată pe Stripe sandbox): clientul plătește
  * 49 RON, TVA inclus, prin Stripe în rol de Merchant of Record. Nu mai
@@ -61,8 +73,8 @@ const PRET_AFISAT = PRET_RON + ' lei';
 /* ---------- NAP (nume, adresă, contact) — sursa unică ---------- */
 const NAP = {
   DENUMIRE: textUnic('NAP.DENUMIRE', /DENUMIRE\s*:\s*'[^']*'/g),
-  CIF: textUnic('NAP.CIF', /CIF\s*:\s*'[^']*'/g),
-  REG_COM: textUnic('NAP.REG_COM', /REG_COM\s*:\s*'[^']*'/g),
+  CIF: textOptional('NAP.CIF', /CIF\s*:\s*'[^']*'/g),
+  REG_COM: textOptional('NAP.REG_COM', /REG_COM\s*:\s*'[^']*'/g),
   ADRESA: textUnic('NAP.ADRESA', /ADRESA\s*:\s*'[^']*'/g),
   TELEFON: textUnic('NAP.TELEFON', /TELEFON\s*:\s*'[^']*'/g),
   EMAIL: textUnic('NAP.EMAIL', /EMAIL\s*:\s*'[^']*'/g),
@@ -85,23 +97,71 @@ function cifraControlCif(cif) {
   const calc = (s * 10) % 11;
   return { control, calc: calc === 10 ? 0 : calc };
 }
-const faraPrefix = NAP.CIF.toUpperCase().replace(/\s/g, '').replace(/^RO/, '');
-if (!/^\d{2,10}$/.test(faraPrefix)) {
-  throw new Error('site/config.js: NAP.CIF trebuie să fie 2–10 cifre (eventual cu prefix RO) — este „' + NAP.CIF + '”.');
-}
-const { control, calc } = cifraControlCif(faraPrefix);
-if (control !== calc) {
-  throw new Error(
-    'site/config.js: NAP.CIF „' + NAP.CIF + '” are cifra de control „' + control +
-    '”, dar algoritmul canonic (cheia ' + CHEIE_CIF + ') dă „' + calc +
-    '”. O cifră greșit aici înseamnă facturi neconforme — corectează înainte de deploy.'
-  );
+
+/* ⚠ CIF-ul a devenit OPȚIONAL (4 oct. 2026, varianta „doar site”).
+ * Raționamentul, pentru că încape într-un rând: cine ia banul de la
+ * client este Stripe (Managed Payments = Merchant of Record), nu noi, și
+ * Stripe îi emite clientului factură. Deci CIF-ul nu e necesar pentru a
+ * încasa — iar până vine PFA-ul, singura alternativă era un CUI
+ * inventat, care ar ajunge public pe pagină.
+ *
+ * Deci: CIF gol = site-ul nu afișează deloc identificatorul fiscal, în
+ * loc să afișeze `RO00000000`. Iar un CIF care E completat e validat cu
+ * algoritmul canonic, ca unul greșit să nu poată ajunge pe pagină.
+ * Cifra de control se verifică doar când există o valoare de verificat. */
+const CIF_PRESENT = NAP.CIF.trim() !== '' && !/00000|EXEMPLU/i.test(NAP.CIF);
+const PLACEHOLDER_REG_COM = /J?\d{0,2}\/?0{2,4}\/?0{2,4}|EXEMPLU/i.test(NAP.REG_COM);
+if (CIF_PRESENT) {
+  const faraPrefix = NAP.CIF.toUpperCase().replace(/\s/g, '').replace(/^RO/, '');
+  if (!/^\d{2,10}$/.test(faraPrefix)) {
+    throw new Error('site/config.js: NAP.CIF trebuie să fie 2–10 cifre (eventual cu prefix RO) — este „' + NAP.CIF + '”.');
+  }
+  const { control, calc } = cifraControlCif(faraPrefix);
+  if (control !== calc) {
+    throw new Error(
+      'site/config.js: NAP.CIF „' + NAP.CIF + '” are cifra de control „' + control +
+      '”, dar algoritmul canonic (cheia ' + CHEIE_CIF + ') dă „' + calc +
+      '”. O cifră greșit aici înseamnă facturi neconforme — corectează înainte de deploy.'
+    );
+  }
 }
 
 /* Placeholder-ele din repo: cât timp sunt astea în config.js, NAP-ul
  * e de umplut. Nu blochează testele (altfel n-ar mai putea fi livrat
  * codul), dar se spun explicit la fiecare rulare. */
-const PLACEHOLDER_NAP = /00000|EXEMPLU/i.test(NAP.CIF + NAP.REG_COM + NAP.ADRESA);
+/* Placeholder-ele din repo: cât timp sunt astea în config.js, NAP-ul
+ * e de umplut. Nu blochează testele (altfel n-ar mai putea fi livrat
+ * codul), dar se spun explicit la fiecare rulare.
+ *
+ * ⚠ De la 4 oct. 2026 CIF-ul și REG_COM nu mai fac parte din asta: ele
+ * sunt opționale și, dacă nu sunt completate, nu se publică deloc (vezi
+ * `NAP_PUBLICA`). Ce trebuie să fie real pentru ca pagina să fie
+ * conformă e adresa, telefonul și emailul — acelea rămân blocate.
+ *
+ * Placeholder-ul de Registru Comerț are forma `J00/000/0000` — cu grupuri
+ * de câte trei zerouri, NU cinci de zero consecutive. Un regex căuta
+ * doar `00000` și l-ar fi lăsat să treacă nemascat pe pagina publică. */
+/* Telefonul de placeholder arată ca „+40 720 000 000” — cu grupuri de
+ * câte TREI zerouri, nu cinci de zero consecutive. Un regex care căuta
+ * doar `00000` nu-l vedea și ar lăsa un număr fictiv pe pagină publică.
+ * De aceea verificăm și grupuri de 3 zerouri, ca la Reg. Com. */
+const PLACEHOLDER_TEL = /(\b0{3,}\b)|EXEMPLU/i.test(NAP.TELEFON);
+const PLACEHOLDER_NAP = PLACEHOLDER_REG_COM || PLACEHOLDER_TEL || /00000|EXEMPLU/i.test(NAP.ADRESA);
+
+/* Singurul obiect pe care îl consumă șabloanele și testele de publicare.
+ * Face o singură treabă: scoate CIF-ul și Registrul Comerțului din
+ * payload când ele nu sunt completate, ca un `RO00000000` să nu ajungă
+ * niciodată pe pagină. Când sunt completate, trec neatinsa — atunci
+ * sunt deja validate mai sus. */
+const NAP_PUBLICA = {
+  DENUMIRE: NAP.DENUMIRE,
+  ADRESA: NAP.ADRESA,
+  TELEFON: NAP.TELEFON,
+  EMAIL: NAP.EMAIL,
+  SITE: NAP.SITE,
+  CIF: CIF_PRESENT ? NAP.CIF : '',
+  REG_COM: PLACEHOLDER_REG_COM ? '' : NAP.REG_COM
+};
 
 /* Retenția GDPR: pagina de contact promite când se șterg datele, iar
  * job-ul din module-4/gdpr-purge.sql trebuie să facă exact asta. E o
@@ -234,7 +294,7 @@ function verificaLegaturaStripe(live, paymentLink) {
 const LINK_STRIPE_E_LIVE = verificaLegaturaStripe(LIVE_STRIPE, STRIPE.PAYMENT_LINK);
 
 module.exports = {
-  PRET_RON, PRET_AFISAT, NAP, PLACEHOLDER_NAP, RETENTION_H, EXCEPTII_CIFRE, CONFIG, CHEIE_CIF,
+  PRET_RON, PRET_AFISAT, NAP, NAP_PUBLICA, CIF_PRESENT, PLACEHOLDER_REG_COM, PLACEHOLDER_TEL, PLACEHOLDER_NAP, RETENTION_H, EXCEPTII_CIFRE, CONFIG, CHEIE_CIF,
   cifraControlCif, PROCESATOR_PLATI, PRAG_REGULARIZARE, STRIPE, LEGAL, PLACEHOLDER_LEGAL,
   LIVE_STRIPE, LINK_STRIPE_E_LIVE, verificaLegaturaStripe
 };

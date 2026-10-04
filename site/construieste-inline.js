@@ -55,6 +55,24 @@ for (const sablon of sabloane) {
     inlocuite++;
     return TOKENURI[cheie];
   });
+
+  /* Blocuri condiționale: {{#CHEIE}}…{{/CHEIE}} se păstrează doar dacă
+   * valoarea e nevidă; altfel tot blocul dispare.
+   *
+   * Motivul: CIF-ul și Reg. Com. au devenit opționale (config-autoact.js
+   * → NAP_PUBLICA). Fără asta, footer-ul ar afișa „CIF · Reg. Com.” cu
+   * câmpurile goale, iar JSON-LD ar publica „vatID": "" — adică o pagină
+   * care pretinde că are dată fiscală și nu o are. Blocul dispare curat,
+   * iar când CUI-ul apare în config, apare și pe pagină, fără altă editare.
+   *
+   * Se rulează DUPĂ înlocuirea tokenurilor simple, ca un token gol să
+   * fie totuși tratat ca „gol" și nu ca „necunoscut". */
+  html = html.replace(/\{\{#([A-Z_]+)\}\}([\s\S]*?)\{\{\/\1\}\}/g, (m, cheie, continut) => {
+    if (!(cheie in TOKENURI)) throw new Error(sablon + ': bloc necunoscut „' + m + '”');
+    inlocuite++;
+    return String(TOKENURI[cheie]).trim() === '' ? '' : continut;
+  });
+
   if (html.includes('{{')) throw new Error(sablon + ': au rămas tokenuri neînlocuite');
   if (/SABLON\s+—\s+nu edita/.test(html)) throw new Error(sablon + ': nota de build a ajuns în pagina generată');
 

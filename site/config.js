@@ -105,12 +105,28 @@ window.AUTOACT_CONFIG = {
     INSTANTE: 'înlocuiește: instanțele competente de la sediul firmei'
   },
 
+  /* NAP = Nume, Adresă, Punct de contact. Apare în footer, pe pagina de
+   * contact și în JSON-LD (Organization) — totul se generează din aici.
+   *
+   * ⚠ CIF și REG_COM sunt OPȚIONALE de la 4 oct. 2026. Lăsate goale, sunt
+   * pur și simplu nepublicate (config-autoact.js → NAP_PUBLICA scoate
+   * câmpul din payload), iar blocul din footer dispare curat.
+   * Umple-le când ai CUI de la ANAF, iar ele apar imediat, fără altă
+   * modificare. Cât timp sunt goale, documentele care le cer (contract,
+   * cerere DRPCIV) NU pot fi emise — de aceea generatorul rămâne oprit.
+   * Motivul pentru care sunt opționale: cine ia banul de la client e
+   * Stripe (Managed Payments = Merchant of Record), nu noi.
+   *
+   * ADRESA și TELEFON rămân OBLIGATORII: GDPR art. 154 și OUG 34/2014
+   * cer ca un site de vânzări să spună cine e vânzătorul și cum e de
+   * contactat. Placeholder-uri aici înseamnă o firmă fictivă pe un
+   * domeniu public. */
   NAP: {
     DENUMIRE: 'AutoAct',
-    CIF: 'RO00000000',          // ← înlocuiește (placeholder)
-    REG_COM: 'J00/000/0000',    // ← înlocuiește (placeholder)
-    ADRESA: 'Str. Exemplu 1, Sector 1, București', // ← înlocuiește
-    TELEFON: '+40 700 000 000',  // ← înlocuiește
+    CIF: '',                    // ← opțional: CUI de la ANAF (PFA)
+    REG_COM: '',                // ← opțional: Registrul Comerțului
+    ADRESA: 'Str. MICA 25, bl. 25, sc. C, ap. 13, Brașov',
+    TELEFON: '+40 720 000 000',  // ← înlocuiește cu numărul tău real
     EMAIL: 'contact@autoact.eu',
     SITE: 'https://autoact.eu'
   }

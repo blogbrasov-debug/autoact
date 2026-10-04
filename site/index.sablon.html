@@ -144,7 +144,7 @@
 
   <footer>
     <p class="nap">
-      <strong>{{DENUMIRE}}</strong> · CIF {{CIF}} · Reg. Com. {{REG_COM}}<br>
+      <strong>{{DENUMIRE}}</strong>{{#CIF}} · CIF {{CIF}} · Reg. Com. {{REG_COM}}{{/CIF}}<br>
       {{ADRESA}} · <a href="tel:{{TELEFON}}">{{TELEFON}}</a> · <a href="mailto:{{EMAIL}}">{{EMAIL}}</a>
     </p>
     <p><a href="/contact">Contact</a> · <a href="/termeni">Termeni și condiții</a> · <a href="/gdpr">GDPR</a></p>
@@ -168,8 +168,6 @@
         "@id": "{{SITE_URL}}#organizatie",
         "name": "{{DENUMIRE}}",
         "url": "{{SITE_URL}}",
-        "vatID": "{{CIF}}",
-        "identifier": { "@type": "PropertyValue", "name": "Reg. Com.", "value": "{{REG_COM}}" },
         "email": "{{EMAIL}}",
         "telephone": "{{TELEFON}}",
         "address": {

@@ -39,8 +39,14 @@
 
 const fs = require('fs');
 const path = require('path');
-const { PRET_RON, PRET_AFISAT, NAP, PLACEHOLDER_NAP, RETENTION_H, EXCEPTII_CIFRE, cifraControlCif, PLACEHOLDER_LEGAL,
+const { PRET_RON, PRET_AFISAT, NAP, NAP_PUBLICA, PLACEHOLDER_NAP, RETENTION_H, EXCEPTII_CIFRE, cifraControlCif, PLACEHOLDER_LEGAL,
         PROCESATOR_PLATI, PRAG_REGULARIZARE, STRIPE } = require('../config-autoact.js');
+
+/* Verificările NAP se fac pe NAP_PUBLICA, nu pe NAP: CIF-ul și Reg. Com.
+ * au devenit opționale, iar NAP_PUBLICA e deja payload-ul care se
+ * publică (gol când identificatorii nu sunt completate). Verificând
+ * contra lui NAP, testul ar cere prezența unui CUI pe o pagină care
+ * nu are de unde-l lua — deci ar bloca tocmai varianta „doar site”. */
 
 const rad = (p) => path.join(__dirname, p);
 const configJs = fs.readFileSync(rad('config.js'), 'utf8');
@@ -205,7 +211,7 @@ const cheiNap = [...new Set(tokenuriNap.map((t) => t.slice(2, -2)))].sort();
 const asteptate = ['ADRESA', 'CIF', 'DENUMIRE', 'EMAIL', 'REG_COM', 'SITE_URL', 'TELEFON'];
 ok(cheiNap.length === asteptate.length && asteptate.every((c) => cheiNap.includes(c)),
   'site/index.sablon.html: toate cele 7 tokenuri NAP prezente în șablon — găsite: ' + cheiNap.join(', '));
-ok(!sablon.includes(NAP.CIF) && !sablon.includes(NAP.ADRESA) && !sablon.includes(NAP.TELEFON),
+ok(!sablon.includes(NAP_PUBLICA.ADRESA) && !sablon.includes(NAP_PUBLICA.TELEFON),
   'site/index.sablon.html: nicio valoare NAP scrisă direct (totul prin tokenuri)');
 
 /* ============ 3. NAP: apare IDENTIC cu config.js ============ */
@@ -214,12 +220,15 @@ ok(!sablon.includes(NAP.CIF) && !sablon.includes(NAP.ADRESA) && !sablon.includes
  * chiar dacă cifra nouă ar fi altfel permisă (1..9, an, etc.). */
 function problemeNap(h) {
   const p = [];
-  if (!h.includes(NAP.CIF)) p.push('CIF-ul din config.js lipsește din pagină');
+  /* Doar dacă CIF-ul e completat în config trebuie să apară în pagină. Cât
+   * timp e gol, absența lui e CORECTĂ — și e chiar blocul {{#CIF}} care
+   * dispare din footer. */
+  if (NAP_PUBLICA.CIF && !h.includes(NAP_PUBLICA.CIF)) p.push('CIF-ul din config.js lipsește din pagină');
   if (!h.includes(NAP.EMAIL)) p.push('e-mail-ul NAP lipsește din pagină');
   if (!h.includes(NAP.ADRESA)) p.push('adresa NAP lipsește din pagină');
   // cifre „asemănătoare” cu cele reale, care ar indica o falsificare
   const cifreCif = h.match(/\bRO\d{2,10}\b/g) || [];
-  for (const c of cifreCif) if (c !== NAP.CIF) p.push('CIF strain în pagină: ' + c);
+  for (const c of cifreCif) if (c !== NAP_PUBLICA.CIF) p.push('CIF strain în pagină: ' + c);
   const telUri = h.match(/tel:([+\d\s()-]{6,})/g) || [];
   for (const t of telUri) if (!t.includes(NAP.TELEFON)) p.push('telefon strain: ' + t);
   const mailUri = h.match(/mailto:([^\"'>]+)/g) || [];
@@ -259,7 +268,14 @@ const org = graf.find((n) => n['@type'] === 'Organization');
 const web = graf.find((n) => n['@type'] === 'WebSite');
 const prod = graf.find((n) => n['@type'] === 'Product');
 ok(!!org && !!web && !!prod, 'JSON-LD: toate cele trei tipuri există (Organization, WebSite, Product)');
-ok(org && org.vatID === NAP.CIF, 'JSON-LD: Organization.vatID = CIF-ul din config.js — este „' + (org && org.vatID) + '”');
+/* Dacă nu există CUI, JSON-LD nu trebuie să anunțe unul — nici măcar
+ * gol. Când există, trebuie să fie exact cel din config.js. */
+ok(
+  NAP_PUBLICA.CIF ? org && org.vatID === NAP_PUBLICA.CIF : !org || org.vatID === undefined,
+  'JSON-LD: Organization.vatID ' +
+    (NAP_PUBLICA.CIF ? '= CIF-ul din config.js' : 'absent, pentru că nu există CUI') +
+    ' — este „' + (org && org.vatID) + '”'
+);
 ok(org && org.email === NAP.EMAIL && org.telephone === NAP.TELEFON, 'JSON-LD: Organization poate contactul din config.js');
 ok(org && org.address && org.address.streetAddress === NAP.ADRESA && org.address.addressCountry === 'RO', 'JSON-LD: adresa poștală NAP cu addressCountry RO');
 ok(org && org.contactPoint && org.contactPoint.contactType && org.contactPoint.availableLanguage === 'ro', 'JSON-LD: contactPoint cu tip și limbă română');
@@ -498,7 +514,12 @@ ok(
  * care l-au ales — altă forma, documentul rămâne o decizie nemotivată. */
 ok(launch.includes(PRET_AFISAT) && /TVA inclus/i.test(launch),
   'LAUNCH.md: prețul afișat (' + PRET_AFISAT + ', TVA inclus) e documentat');
-ok(launch.includes('RO00000000') === PLACEHOLDER_NAP, 'LAUNCH.md: statusul NAP-ului (placeholder/necompletat) corespunde lui config.js');
+/* Statusul NAP-ului în LAUNCH.md trebuie să corespundă realității din
+ * config.js. Locul e luat de cifrele de telefon, care sunt singurele
+ * încă obligatorii: CIF-ul a devenit opțional și nepublicat, deci nu
+ * mai e motivul pentru care deploy-ul s-ar opri. */
+ok(launch.includes('TELEFON placeholder') === PLACEHOLDER_NAP,
+  'LAUNCH.md: statusul NAP-ului (placeholder/necompletat) corespunde lui config.js');
 for (const f of ['site/config.js', 'config-autoact.js', 'module-3/deploy-autoact.sh', 'module-2/sabloane/README.md', 'module-4/gdpr-purge.sql', 'module-5/plati-schema.sql']) {
   const citat = launch.includes('`' + f + '`') || launch.includes(f);
   ok(!citat || fs.existsSync(path.join(__dirname, '..', f)), 'LAUNCH.md: referința ' + f + ' indică un fișier existent');
@@ -565,8 +586,16 @@ for (const [nume, muta] of probe) {
  * cifre nu le poate prinde — verificarea NAP-ului e cea care le
  * prinde, comparând cu valoarea din config.js. */
 const mutatiiNap = [
-  ['CIF falsificat în footer (o cifră schimbată)', 'index.html', (h) => h.replace('CIF ' + NAP.CIF, 'CIF RO1234567893')],
-  ['JSON-LD anunță altă firmă (Organization.vatID)', 'index.html', (h) => h.replace('"vatID": "' + NAP.CIF + '"', '"vatID": "RO9999999999"')],
+  /* Cele două mutații de CIF au sens doar când există un CUI în config.
+   * Fără el, nu e ce mutații — textul de înlocuit nu există în pagină, deci
+   * mutația nu schimbă nimic și ar „trece” fals. Sunt deci condiționate. */
+  ...(NAP_PUBLICA.CIF ? [
+    ['CIF falsificat în footer (o cifră schimbată)', 'index.html', (h) => h.replace('CIF ' + NAP_PUBLICA.CIF, 'CIF RO1234567893')],
+    ['JSON-LD anunță altă firmă (Organization.vatID)', 'index.html', (h) => h.replace('"vatID": "' + NAP_PUBLICA.CIF + '"', '"vatID": "RO9999999999"')]
+  ] : []),
+  /* Și o mutație care contează ACUM: dacă cineva reintroduce un CUI
+   * placeholder în pagină, banca de cifre trebuie să cadă. */
+  ['CIF placeholder reintroducus în footer', 'index.html', (h) => h.replace('</footer>', '<p>CIF RO00000000</p></footer>')],
   ['e-mail de contact inventat', 'index.html', (h) => h.replace('mailto:' + NAP.EMAIL, 'mailto:alt@exemplu.ro')],
   ['adresă falsificată', 'contact.html', (h) => h.replace(NAP.ADRESA, 'Str. Fictivă 99')],
   ['CIF falsificat pe pagina de contact', 'contact.html', (h) => h.replace('CIF ' + NAP.CIF, 'CIF RO1234567893')]

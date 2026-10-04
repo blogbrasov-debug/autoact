@@ -18,7 +18,8 @@
 | Șabloane Google Docs (3 documente, 37 placeholder-e) | ✅ conținut redactat pe disc |
 | Site static + pagină de contact | ✅ generate din `site/*.sablon.html` |
 | Idempotency + GDPR contra PostgreSQL real | ✅ 27/27 pe Docker |
-| NAP (CIF, adresă, telefon) | ⚠️ **PLACEHOLDER** — blochează deploy-ul |
+| NAP (adresă, telefon) | ⚠️ **TELEFON placeholder** — adresa e completată |
+| NAP CIF / Reg. Com. | ⬜ **opționale** — nepublicate cât timp sunt goale |
 | Pagini `/termeni` și `/gdpr` | ✅ generate din `site/config.js` · blocaj: `LEGAL` necompletat |
 | Cont Stripe (sandbox) + produs 49 lei + „Managed Payments" | ✅ creat, plăți reale măsurate |
 | Cont Stripe **live** (Go live) | ❌ cere date personale + act de identitate |
@@ -58,22 +59,31 @@ costă mai mult decât timpul pierdut.
    [8] GO + prima comandă reală
 ```
 
-### Pasul 1 — NAP + decizii legale (blochează tot restul)
+### Pasul 1 — NAP + decizii legale
 
-**De ce primul:** CIF-ul intră în `.env` la deploy și în JSON-LD/footer/pagină de contact. Fără el,
-serverul pornește cu CIF fictiv și **nu se mai repară automat**.
+**Ce e obligatoriu azi:** doar `TELEFON` (placeholder acum) și `LEGAL.INSTANTE`. Adresa e completată.
 
-1. Completează blocul `NAP` din [`site/config.js`](site/config.js):
-   `DENUMIRE`, `CIF`, `REG_COM`, `ADRESA`, `TELEFON`, `EMAIL`.
-   - **Cifra de control e validată automat** (cheia canonică `753217532`) — un CIF greșit face
-     `node config-autoact.js` să arunce, deci nu poate trece neobservat.
+1. Completează `TELEFON` din [`site/config.js`](site/config.js) cu numărul tău real.
+   GDPR art. 154 și OUG 34/2014 cer ca un site de vânzări să spună cine e vânzătorul și cum e de
+   contactat — un număr fictiv înseamnă o firmă care nu există pe un domeniu public.
+
 2. Decide și completează paginile `/termeni` și `/gdpr` (vezi §2 — conținut legal, nu generat de cod).
+
 3. Decide regimul de TVA cu contabilul (serviciu către persoană fizică → scutire, art. 282 ind. 2
    C.fisc. — **verifică**, nu presupune).
 
+**Ce NU mai blochează: CIF-ul și Reg. Com.** Sunt opționale din 4 oct. 2026, pentru că cine ia banul de la
+client este **Stripe** (Managed Payments = Merchant of Record), care îi emite clientului factură. Lăsate
+goale, sunt *nepublicate* — blocul lor dispare curat din footer și din JSON-LD, deci niciun CIF fictiv
+nu mai ajunge pe pagină. Când ai CUI de la ANAF (PFA), îl pui în config și apare imediat, fără altă
+modificare; cifra de control e validată automat (cheia canonică `753217532`).
+
+⚠ Ce rămâne blocat fără CUI: **documentele** (contract, cerere DRPCIV). Alea le emiți cu semnătura ta și
+cer CUI + Reg. Com. De aceea generatorul rămâne oprit, iar site-ul urcă în mod demo.
+
 ```bash
 node site/construieste-inline.js   # regenerează paginile cu NAP-ul nou
-node site/test-banca-cifre.js     # trebuie să NU mai afișeze avertismentul de placeholder
+node site/test-banca-cifre.js     # tebuie să NU mai afișeze avertismentul de placeholder
 ```
 
 ### Pasul 2 — Conturi externe + secrete
@@ -169,7 +179,7 @@ Bugetul e de 2 EUR, iar `.eu` intră în el chiar la prima înregistrare:
 | În lei (curs ECB 2 oct 2026: 1 EUR = 1.1225 USD) | ≈ **1,59 €**; cu TVA 19% ≈ **1,90 €** | ~55 lei/an |
 | Reînnoire | $5.68/an ≈ 5,06 € | 12 EUR + TVA |
 | Eligibilitate | **cetățean UE indiferent de reședință**, rezident UE sau organizație stabilită în UE (EURid, din 2 aug 2021) | **CUI/PFA al registrantului** |
-| Ce înseamnă pentru tine | **persoană fizică română e eligible, fără CUI și fără firmă** | nevoie de CUI → abia după NAP |
+| Ce înseamnă pentru tine | **persoană fizică română e eligible, fără CUI și fără firmă** | confirmat: CNP-ul e suficient la Tax information |
 
 ⚠️ **Prețul de $1.79 e promoțional și valabil un singur an** — reînnoirea e $5.68. Bugetă cei
 2 EUR pentru **primul an**; de acolo încolo e o decizie de business, nu de lansare.
