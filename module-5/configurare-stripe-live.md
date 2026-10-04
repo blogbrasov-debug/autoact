@@ -112,11 +112,18 @@ Nu modifica produsul de test. **Clonează-l** în live mode și verifică:
 
 ## 4. Payment Link live
 
-Payment Links → produsul clonat → creează linkul → copiază URL-ul. Arată așa:
+Payment Links → produsul nou → creează linkul → copiază URL-ul. **Forma
+verificată pe contul real (4 oct. 2026):** linkul de test începe cu `test_`,
+iar linkul live **nu are niciun prefix**:
 
 ```
-https://buy.stripe.com/live_...
+test:  https://buy.stripe.com/test_6oU8wR7L91QodQ97ap4ZG01
+live:  https://buy.stripe.com/4gMaEWbsY9mR3NufPx1Nu00
 ```
+
+Deci „e live sau e test” se vede după prefixul `test_`, nu după `live_` —
+regula greșită a fost scrisă aici la început și a oprit build-ul când
+configul a primit linkul live autentic.
 
 Asta e singurul lucru de pe întreaga listă pe care mi-l trimiți. Îl pun în
 `site/config.js` (`STRIPE.PAYMENT_LINK`), rulez `bash ruleaza-teste.sh` și
@@ -180,6 +187,28 @@ date apar și pe pagina de contact și în JSON-LD.
 | `module-2/autoact-workflow.json` | generat — Payment Link-ul intră în `url_plata` |
 | `module-5/autoact-workflow-plati.json` | generat — webhook-ul primește evenimentul live |
 | `site/index.html` | butonul „Cumpără acum”, abia acum |
+
+### 7.bis. Ce înseamnă „Managed Payments” pentru client și pentru noi
+
+La crearea linkului, Stripe scrie cifra costului în chiar formularul:
+„This adds a **3.5% fee per transaction**”. Deci procentul necunoscut din
+`LAUNCH.md` §1.bis e acum măsurat: **3,5% din fiecare tranzacție**, în plus
+față de comisionul de procesare al cardului. La 49 lei înseamnă 1,72 lei
+pe comandă.
+
+Două consecințe care se văd la client:
+
+1. **Checkout-ul este al Link-ului, nu al Stripe clasic.** Stripe scrie
+   explicit: „When Managed Payments is enabled, Link powers the customer
+   experience. The checkout page and receipts show the order is **Sold
+   through Link**.” Clientul plătește pe pagină Link, în română, cu
+   card, Apple Pay, Google Pay sau Link. Factura și bonul vin de la Stripe,
+   ca înainte — partea noastră rămâne corectă.
+2. **Nu se culeg nume și adrese** la checkout (casetele sunt blocate și
+   ne-bifate). E-mail se cere. Workflow-ul trimite ZIP-ul pe e-mail, deci
+   ne trebuie doar e-mailul — dar la prima plată reală trebuie verificat
+   că `checkout.session.completed` îl conține într-adevăr, pentru că
+   payload-ul Link poate fi diferit de cel al Checkout-ului clasic.
 | `module-5/test-stripe-live.js` | verifică coerența de mai sus |
 
 `STRIPE_WEBHOOK_SECRET` merge **doar** în `.env` pe server. Nu în repo, nu în

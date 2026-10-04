@@ -207,8 +207,13 @@ function verificaLegaturaStripe(live, paymentLink) {
       typeof live + ' face ca un link de test să pară live și invers.'
     );
   }
-  const esteLive = /\/live_[A-Za-z0-9_]+$/.test(paymentLink);
-  const esteTest = /\/test_[A-Za-z0-9_]+$/.test(paymentLink);
+  /* Formatul real, citit din contul live (4 oct. 2026): un Payment Link
+   * de test începe cu `test_` (https://buy.stripe.com/test_6oU8…), iar un
+   * link live NU are niciun prefix — e https://buy.stripe.com/<id>.
+   * Aritmetica asta e inversul primei ipoteze („live_”), care a prins
+   * greșit un link live autentic drept „de test” și a oprit build-ul. */
+  const esteTest = /\/test_[A-Za-z0-9]+$/.test(paymentLink);
+  const esteLive = !esteTest;
   if (live && !esteLive) {
     throw new Error(
       'site/config.js: PLATARI.LIVE = true, dar STRIPE.PAYMENT_LINK este un link de test (' +
@@ -218,9 +223,10 @@ function verificaLegaturaStripe(live, paymentLink) {
   }
   if (!live && !esteTest) {
     throw new Error(
-      'site/config.js: PLATARI.LIVE = false (test mode), dar STRIPE.PAYMENT_LINK este un link ' +
-      'live (' + paymentLink + '). Contul de test nu are obiectul acela: măsurătorile din ' +
-      'sandbox ar plăti de două ori, iar orice test ar încasa bani reali.'
+      'site/config.js: PLATARI.LIVE = false (test mode), dar STRIPE.PAYMENT_LINK nu e un link ' +
+      'de test (' + paymentLink + ' — în test mode, linkul începe cu „test_”). Contul de test nu ' +
+      'are obiectul acela: măsurătorile din sandbox ar plăti de două ori, iar orice test ar ' +
+      'încasa bani reali.'
     );
   }
   return esteLive;

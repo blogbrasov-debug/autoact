@@ -204,7 +204,7 @@
       ],
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ (() => { const s = $json.id_tranzactie; const url = new URL(\"https://buy.stripe.com/test_6oU8wR7L91QodQ97ap4ZG01\"); url.searchParams.set(\"client_reference_id\", s); return JSON.stringify({ status: \"awaiting_payment\", suma: 49, moneda: \"RON\", suma_ron: 49, tva_inclus: true, id_tranzactie: s, url_plata: url.toString(), mesaj: \"Finalizeaza plata pentru a genera documentele.\" }); })() }}",
+        "responseBody": "={{ (() => { const s = $json.id_tranzactie; const url = new URL(\"https://buy.stripe.com/4gMaEWbsY9mR3NufPx1Nu00\"); url.searchParams.set(\"client_reference_id\", s); return JSON.stringify({ status: \"awaiting_payment\", suma: 49, moneda: \"RON\", suma_ron: 49, tva_inclus: true, id_tranzactie: s, url_plata: url.toString(), mesaj: \"Finalizeaza plata pentru a genera documentele.\" }); })() }}",
         "options": {
           "responseCode": 200
         }

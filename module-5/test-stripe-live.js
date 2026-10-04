@@ -52,9 +52,13 @@ const liveDinConfig = /\bLIVE\s*:\s*true/.test(SRC_CONFIG);
 const areLive = /\bLIVE\s*:\s*false/.test(SRC_CONFIG);
 ok(liveDinConfig !== areLive, 'site/config.js are comutatorul PLATARI.LIVE (exact unul)');
 
-const linkTest = /\/test_[A-Za-z0-9_]+$/.test(C.STRIPE.PAYMENT_LINK);
-const linkLive = /\/live_[A-Za-z0-9_]+$/.test(C.STRIPE.PAYMENT_LINK);
-ok(linkTest !== linkLive, 'Payment Link-ul e fie de test, fie live — niciodată amândouă');
+/* Regula reală, citită din contul live: linkul de TEST începe cu
+ * „test_”, iar linkul LIVE nu are prefix deloc. Nu „linkul live începe
+ * cu live_” — prima versiune a regulii a fost exact inversul și a
+ * respins un link live autentic. */
+const linkTest = /\/test_[A-Za-z0-9]+$/.test(C.STRIPE.PAYMENT_LINK);
+const linkLive = !linkTest && /^https:\/\/buy\.stripe\.com\/[A-Za-z0-9]+$/.test(C.STRIPE.PAYMENT_LINK);
+ok(linkTest || linkLive, 'Payment Link-ul e fie de test, fie live, într-unul din cele două forme Stripe');
 ok(
   liveDinConfig ? linkLive : linkTest,
   'PLATARI.LIVE (' + (liveDinConfig ? 'true' : 'false') + ') corespunde cu tipul de link (' +
@@ -69,7 +73,7 @@ ok(contine(Ghid, C.STRIPE.COD_FISCAL), 'ghidul folosește codul fiscal din confi
 ok(contine(Ghid, C.STRIPE.WEBHOOK_URL), 'ghidul folosește URL-ul de webhook din config');
 ok(contine(Ghid, 'checkout.session.completed'), 'ghidul folosește evenimentul din workflow');
 ok(contine(Ghid, 'STRIPE_WEBHOOK_SECRET'), 'ghidul spune unde merge semnătura webhook-ului');
-ok(contine(Ghid, 'https://buy.stripe.com/live_'), 'ghidul arată forma linkului live');
+ok(contine(Ghid, 'https://buy.stripe.com/'), 'ghidul arată forma linkului Stripe');
 ok(
   /txcd_10000000/.test(Ghid) &&
     contine(Ghid, 'Electronically Supplied Services'),
@@ -198,7 +202,7 @@ function aruncaLa(mutatie, motiv) {
   }
 }
 const TEST_LINK = 'https://buy.stripe.com/test_6oU8wR7L91QodQ97ap4ZG01';
-const LIVE_LINK = 'https://buy.stripe.com/live_abcdefgh';
+const LIVE_LINK = 'https://buy.stripe.com/4gMaEWbsY9mR3NufPx1Nu00';
 aruncaLa({ live: true, link: TEST_LINK }, 'LIVE=true cu link de test');
 aruncaLa({ live: false, link: LIVE_LINK }, 'LIVE=false cu link live');
 aruncaLa({ live: 'da', link: LIVE_LINK }, 'comutatorul nu e boolean');

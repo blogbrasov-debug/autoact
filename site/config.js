@@ -66,7 +66,7 @@ window.AUTOACT_CONFIG = {
      * Verificarea stă în config-autoact.js (verificaLegaturaStripe) și
      * e testată cu mutații în module-5/test-stripe-live.js.
      * Pașii de activare, cu IBAN cu tot: module-5/configurare-stripe-live.md */
-    LIVE: false
+    LIVE: true
   },
 
   /* Identificatorii din contul Stripe. ID-urile nu sunt secrete (Payment
@@ -75,9 +75,15 @@ window.AUTOACT_CONFIG = {
    * le citește aici și le generează acolo unde trebuie.
    * La migrarea pe cont live se schimbă DOAR acest bloc. */
   STRIPE: {
-    PRODUS_ID: 'prod_VNHNWQzMXG49vc',   // „Pachet acte auto — vânzare auto (contract + cerere DRPCIV)"
-    PRET_ID: 'price_1UMWpDPhXnPwCaLh5VcKOavY',   // 49.00 RON, one-off, TVA inclus
-    PAYMENT_LINK: 'https://buy.stripe.com/test_6oU8wR7L91QodQ97ap4ZG01',
+    /* Cont LIVE (4 oct. 2026). Produsul a fost creat de la zero în contul
+     * real, nu copiat din sandbox: copierea ar fi adus un link de test în
+     * contul de plată reală. Verificat pe paginile produsului/prețului:
+     * tax_behavior inclusive („Tax included in price: Yes”), tax code
+     * txcd_10000000, interval „One-time”, RON 49.00, iar produsul e
+     * marcat „Eligible” pentru Managed Payments. */
+    PRODUS_ID: 'prod_VNVcTLZo8nibZy',   // „Pachet acte auto — vânzare auto (contract + cerere DRPCIV)"
+    PRET_ID: 'price_1UMkbUBRTh54P0hRemTtrIJS',   // 49.00 RON, one-off, TVA inclus
+    PAYMENT_LINK: 'https://buy.stripe.com/4gMaEWbsY9mR3NufPx1Nu00',
     COD_FISCAL: 'txcd_10000000',       // General — Electronically Supplied Services
     WEBHOOK_URL_STRIPE: 'https://autoact.eu/webhook/stripe'
   },
