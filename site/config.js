@@ -38,15 +38,25 @@ window.AUTOACT_CONFIG = {
   /* Decizie fiscală (3 oct. 2026): procesatorul este **Stripe**, cu
    * „Managed Payments" — Stripe este vânzătorul de drept (Merchant of
    * Record), emite factura și chitanța către client și reține TVA, deci
-   * NU e nevoie de CUI ca să încasăm. Produsul are tax_behavior inclus
-   * (preț cu TVA), iar codul fiscal de mai jos îl face „Eligible".
+   * NU trebuie să emiți factură tu ca să încasezi. Produsul are
+   * tax_behavior inclus (preț cu TVA), iar codul fiscal de mai jos îl
+   * face „Eligible".
    *
-   * Până la regularizare, banii sunt tot venit declarabil — procesatorul îi
-   * raportează. PRAG_COMENZI_REGULARIZARE e comanda la care te oprești și
-   * te înregistrezi (CUI/PFA). Singurul loc unde se schimbă cifra asta.
+   * ⚠ Atenție, corectat la 4 oct. 2026 după ce am citit formularul real
+   * din contul Stripe live: „NU e nevoie de CUI" era prea optimist. La
+   * business type în România există doar PFA, SRL și non-profit — deci
+   * CUI-ul se ia înaintea primei plăți. Ce aduce MoR rămâne valabil:
+   * factura către client o emite Stripe, nu tu.
    */
   PLATARI: {
     PROCESATOR: 'stripe',
+    /* Pragul de DISCUȚIE cu contabilul (regim de TVA), nu data de la care
+     * devii legal. Citit din contul Stripe live (4 oct. 2026): la business
+     * type în România există doar `individual` (PFA / întreprinderea
+     * individuală), `company` (SRL) și `non_profit` — nu și „persoană
+     * fizică neînregistrată”. Deci prin Stripe nu se încasează nici o dată
+     * fără CUI: PFA-ul se ia înaintea primei plăți, iar pragul de mai jos
+     * rămâne întrebarea „trecem la sistem real sau nu?”. */
     PRAG_COMENZI_REGULARIZARE: 200,
     /* Un singur comutator: suntem pe bani reali sau încă în test mode?
      * false → Payment Link-ul trebuie să fie de test și nicio pagină

@@ -24,32 +24,57 @@ Nu ștergi nimic din test mode. Clonezi produsul în live, ca să poți măsura
 
 ## 1. Activate live — formularul din cont
 
-Dashboard → în dreapta sus, selectorul de regim → **Move to live / Activate
-payments**.
+Contul live există deja, ca al doilea cont în același login (lângă sandbox, în
+colțul din dreapta-sus apare „Switch to live account”). Deci nu creezi nimic:
+intri în contul live și apeși **Activate Payments**.
 
 ⚠️ **Țara de origine a contului devine ireversibilă** după activare (scris
 explicit în documentația Stripe: „you can't change the business origin
-country” după ce activezi un serviciu pe cont live). Alege **Romania**, nu
-„United States” — și nu te răzlești într-un cont american care sună mai bine.
+country” după ce activezi un serviciu pe cont live). La 4 oct. 2026, în contul
+live, câmpul era deja completat **Romania** — corect, și nu se mai schimbă.
 
-Ce îți cere formularul, în ordine:
+Ce îți cere formularul, în ordine (citit direct din contul live):
 
 | Câmp | Ce pui | De ce contează |
 |---|---|---|
-| Business type | **Persoană fizică** (Individual) | n-avem CUI; alegerea asta nu e ireversibilă, dar **nu** e motivul pentru care Stripe nu ne cere CUI |
+| Business location | **Romania** | deja completat; ireversibil |
+| Business type | **Persoană Fizică Autorizată / Întreprinderea individuală** | Stripe România oferă doar trei variante: `individual` (PFA), `company` (SRL), `non_profit`. **Nu există „persoană fizică neînregistrată”** — vezi §1.bis |
 | Nume legal | exact cum e în actul de identitate | trebuie să coincidă cu numele de pe IBAN, altfel contul trece în „restricted” |
 | Adresă | adresa de **domiciliu** din act | e adresa pe care o verifică Stripe |
 | Telefon | telefonul tău real | Stripe sună dacă ceva nu se potrivește |
 | Email de suport | cel care primește întrebări de la clienți | apare pe pagina de plată și pe facturi |
-| **IBAN** | **RO**, cont în **lei**, pe numele titularului contului | Stripe face două micro-încărcări (câteva bani, apoi anulate) ca să-l verifice |
+| **IBAN** (pasul 2 „Add your bank”) | **RO**, cont în **lei**, pe numele titularului | Stripe face două micro-încărcări (câteva bani, apoi anulate) ca să-l verifice |
 
 **IBAN-ul se introduce în Stripe, nu aici.** Nu în `config.js`, nu în `.env`,
 nu într-un workflow, nu într-un mesaj. Un cont curent scris într-un fișier
 versionat ajunge public la primul push.
 
-Dacă Stripe cere totuși un număr de înregistrare fiscală și tu nu ai încă:
-începe cu datele de persoană fizică și lasă review-ul să decidă. Nu inventa
-un CUI — Stripe verifică.
+### 1.bis. PFA înseamnă CUI: blocaj real, nu formalitate
+
+Varianta `individual` din formular **este** întreprinderea individuală, deci
+presupune CUI de la ANAF. Consecința pentru planificare: prin Stripe România
+**nu se poate încasa nici măcar o dată fără CUI**. Deci
+`PLATARI.PRAG_COMENZI_REGULARIZARE = 200` rămâne pragul de discuție cu
+contabilul (regim de TVA, dacă se trece la sistem real), **nu** data de la
+care devii legal. Data reală de la care devii legal e PFA-ul.
+
+Ordinea practică: înregistrezi PFA-ul la ANAF (gratuit; act de identitate +
+certificat de persoană fizică), apoi revii aici cu CUI-ul. Nu completa nimic
+înainte să-l ai — numărul de înregistrare fiscală se verifică, iar o valoare
+greșită blochează contul.
+
+Cei 5 pași ai onboarding-ului, așa cum apar în cont:
+
+1. **Verify your business** — Business type, Business details, Account
+   representative, Products or services, Public details, Statement descriptor
+2. **Add your bank** — aici se introduce IBAN-ul
+3. **Secure your account** — 2FA (SMS e ultima variantă, nu prima)
+4. **Add extras**
+5. **Review and submit**
+
+La pasul 1, la „Products or services", răspunsul corect pentru AutoAct e
+serviciu digital generat automat (OCR + șabloane) — același lucru pe care îl
+spui la review-ul de eligibilitate pentru Managed Payments.
 
 ## 2. După activare: `Managed Payments` (Merchant of Record)
 

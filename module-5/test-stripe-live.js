@@ -76,6 +76,19 @@ ok(
   'ghidul numește corect codul fiscal (e pe lista oficială de coduri eligibile)'
 );
 
+/* Constatarea care a schimbat planificarea: la business type, Stripe
+ * România oferă doar PFA / SRL / non-profit. Dacă cineva rescrie ghidul
+ * și uită asta, reapare ideea că se poate încasa fără CUI — și planificarea
+ * de 200 de comenzi devine din nou greșită. */
+ok(
+  /PFA/.test(Ghid) && /[îi]ntreprinderea individual/i.test(Ghid) && /non_profit/.test(Ghid),
+  'ghidul spune că Stripe RO cere PFA (nu există „persoană fizică neînregistrată”)'
+);
+ok(
+  /nu se poate încasa/i.test(Ghid) && /ANAF/.test(Ghid),
+  'ghidul spune că PFA-ul se ia înaintea primei plăți, la ANAF'
+);
+
 /* Documentul nu conține secrete. Motivul nu e paranoia: un signing
  * secret sau o cheie API într-un fișier versionat ajunge public la
  * primul push, iar cine îl are poate crea webhook-uri pe contul tău. */
