@@ -76,6 +76,51 @@ La pasul 1, la „Products or services", răspunsul corect pentru AutoAct e
 serviciu digital generat automat (OCR + șabloane) — același lucru pe care îl
 spui la review-ul de eligibilitate pentru Managed Payments.
 
+### 1.ter. După Go live: `Tax information` e blocajul care rămâne
+
+Formularul Settings → **Tax information** cere trei lucruri, toate goale:
+
+| Câmp | Ce pune | De ce nu se poate completa acum |
+|---|---|---|
+| Type of business | Persoană Fizică Autorizată / Întreprinderea individuală | deja completat |
+| **Numele exact de pe actul fiscal** | trebuie să coincidă **caracter cu caracter** cu numele de pe CUI | e în certificatul fiscal de la ANAF |
+| **Tax Identification Number** | CUI (sau CNP, după cum se folosește fiscal) | vine odată cu PFA-ul |
+| **VAT number (CIF)** | CUI, în formatul cu `RO` | idem |
+
+Stripe avertizează explicit: „Updating this information may introduce new account
+requirements… You will have a **7-day grace period** during which account
+functionality remains the same. To prevent your features from being blocked,
+you must resolve all requirements by the end of the grace period.”
+
+Așadar: contul funcționează acum, dar **nu se completează nicio plată de sus în jos**
+cât timp formularul e gol și Stripe a început perioada de grație. Prioritatea după
+PFA e să se completeze imediat cu datele de pe certificatul fiscal — un nume
+greșit acolo înseamnă raportare fiscală greșită și cont restricționat.
+
+### 1.ter.bis. Emailurile clienților nu pot fi în română
+
+Settings → Customer emails → Default language oferă 16 limbi: Deutsch, English,
+Español (ES), Français, Italiano, 日本語, Nederlands, Dansk, Norsk, Svenska, Suomi,
+Português (BR), Español (LA), Ελληνικά, polski, Português (PT). **Româna nu este
+disponibilă**, așa că bonurile și facturile emise de Stripe vin în engleză.
+
+Nu e contradictoriu cu pagina de plată în română: aceea e interfața Link, care își
+alege limba din browserul clientului. Textul fix trimis de noi (e-mailul cu ZIP-ul)
+rămâne în română, fiind scris de noi, nu de Stripe.
+
+### 1.ter.ter. Branding: culorile, iconul și logo-ul
+
+Am setat deja culorile din contul live, **luate din paleta site-ului**
+(`site/styles.css`, singura sursă): Brand color `#1558b0` (= `--albastru-închis`),
+Accent color `#1a73e8` (= `--albastru`, culoarea butoanelor de pe site). Astfel
+butonul „Plătește" din checkout are exact culoarea butonului „PLĂTEȘTE 49 lei" de pe
+pagina noastră.
+
+**Iconul și logo-ul rămân de încărcat manual**, pentru că Stripe cere fișiere, nu
+SVG, iar `brand/` are logo doar în SVG (`brand/logo.svg`, `brand/logo-placuta.svg`).
+Materialele PNG se generează cu `node brand/exporta-png.js`; pentru Stripe trebuie
+un icon pătrat și un logo dreptunghiular, ambele cu fundal transparent.
+
 ## 2. După activare: `Managed Payments` (Merchant of Record)
 
 Căută în cont după „Managed Payments”. **Nu e un buton, e un review de
