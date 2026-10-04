@@ -471,6 +471,16 @@ ok(
  * editare, în config.js — altfel jumătate din sistem indică contul vechi. */
 const wfPlatiSrc = fs.readFileSync(path.join(__dirname, '..', 'module-5', 'autoact-workflow-plati.json'), 'utf8');
 for (const [nume, valoare] of Object.entries(STRIPE)) {
+  /* Excepție unică: WEBHOOK_URL. E o adresă, nu un identificator de obiect
+   * Stripe, și ea TREBUIE să apară în notele de instalare ale workflow-ului —
+   * acolo îi spui omului ce URL să pună în contul Stripe. Nu e o a doua
+   * sursă de adevăr: notele se generează din config.js, iar
+   * module-5/test-stripe-live.js verifică byte cu byte că sunt identice. */
+  if (nume === 'WEBHOOK_URL') {
+    ok(wfPlatiSrc.includes(valoare),
+      'STRIPE.WEBHOOK_URL: notele de instalare spun chiar URL-ul din config.js');
+    continue;
+  }
   ok(!wfPlatiSrc.includes(valoare),
     'STRIPE.' + nume + ': ID-ul stă în config.js, nu e copiat în workflow-ul de plăți',
     'valoarea „' + valoare + '” apare și în codul generat');

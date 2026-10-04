@@ -180,7 +180,7 @@ if (!/^https:\/\/[a-z0-9.-]+\/webhook\/stripe$/.test(STRIPE.WEBHOOK_URL)) {
  * Payments”): el e vânzătorul de drept, emite factura și reține TVA,
  * deci NU e nevoie de CUI ca să încasăm.
  * PRAG_COMENZI_REGULARIZARE = de la când se oprește vânzarea și se face CUI/PFA. */
-const PROCESATOR_PLATI = unica('PLATARI.PROCESATOR', /PROCESATOR\s*:\s*'[^']*'/).match(/'([^']*)'/)[1];
+const PROCESATOR_PLATI = unica('PLATARI.PROCESATOR', /PROCESATOR\s*:\s*'[^']*'/g).match(/'([^']*)'/)[1];
 if (!PROCESATOR_PLATI.trim()) throw new Error('site/config.js: PLATARI.PROCESATOR e gol.');
 const PRAG_REGULARIZARE = Number(
   unica('PLATARI.PRAG_COMENZI_REGULARIZARE', /PRAG_COMENZI_REGULARIZARE\s*:\s*\d+/).match(/\d+/)[0]
@@ -189,7 +189,46 @@ if (!Number.isInteger(PRAG_REGULARIZARE) || PRAG_REGULARIZARE <= 0) {
   throw new Error('site/config.js: PLATARI.PRAG_COMENZI_REGULARIZARE trebuie să fie un întreg pozitiv.');
 }
 
+/* ---------- Stripe live sau sandbox? Un singur comutator ---------- */
+/* În test mode o plată „reușită” înseamnă zero bani, iar în live mode
+ * nimeni nu mai poate măsura ieftin. Singura greșeală care costă real e
+ * inversul ei: un link de test publicat pe pagină, sau un link live
+ * crezut „de test” și abandonat. De aceea coerența dintre comutator și
+ * link se verifică aici, la citirea configului — înainte de build. */
+const LIVE_STRIPE =
+  unica('PLATARI.LIVE', /\bLIVE\s*:\s*(?:true|false)/g).match(/true|false/)[0] === 'true';
+
+/* Funcție separată de apelul de mai jos ca să poată fi testată cu valori
+ * greșite fără a modifica fișierul de pe disc (vezi test-mutatie). */
+function verificaLegaturaStripe(live, paymentLink) {
+  if (typeof live !== 'boolean') {
+    throw new Error(
+      'site/config.js: PLATARI.LIVE trebuie boolean (true sau false) — o valoare ca ' +
+      typeof live + ' face ca un link de test să pară live și invers.'
+    );
+  }
+  const esteLive = /\/live_[A-Za-z0-9_]+$/.test(paymentLink);
+  const esteTest = /\/test_[A-Za-z0-9_]+$/.test(paymentLink);
+  if (live && !esteLive) {
+    throw new Error(
+      'site/config.js: PLATARI.LIVE = true, dar STRIPE.PAYMENT_LINK este un link de test (' +
+      paymentLink + '). Niciun client nu ar plăti nimic, iar tu ai crede că ai vânzări. ' +
+      'Pune linkul live sau lasă LIVE = false.'
+    );
+  }
+  if (!live && !esteTest) {
+    throw new Error(
+      'site/config.js: PLATARI.LIVE = false (test mode), dar STRIPE.PAYMENT_LINK este un link ' +
+      'live (' + paymentLink + '). Contul de test nu are obiectul acela: măsurătorile din ' +
+      'sandbox ar plăti de două ori, iar orice test ar încasa bani reali.'
+    );
+  }
+  return esteLive;
+}
+const LINK_STRIPE_E_LIVE = verificaLegaturaStripe(LIVE_STRIPE, STRIPE.PAYMENT_LINK);
+
 module.exports = {
   PRET_RON, PRET_AFISAT, NAP, PLACEHOLDER_NAP, RETENTION_H, EXCEPTII_CIFRE, CONFIG, CHEIE_CIF,
-  cifraControlCif, PROCESATOR_PLATI, PRAG_REGULARIZARE, STRIPE, LEGAL, PLACEHOLDER_LEGAL
+  cifraControlCif, PROCESATOR_PLATI, PRAG_REGULARIZARE, STRIPE, LEGAL, PLACEHOLDER_LEGAL,
+  LIVE_STRIPE, LINK_STRIPE_E_LIVE, verificaLegaturaStripe
 };

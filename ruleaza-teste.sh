@@ -13,7 +13,7 @@ cd "$(dirname "$0")"
 
 pas() { echo ""; echo "=================================================================="; echo "▶ $1"; echo "=================================================================="; }
 
-pas "1/15 · Sintaxă: toate modulele JS + scriptul bash de deploy"
+pas "1/16 · Sintaxă: toate modulele JS + scriptul bash de deploy"
 for f in \
   module-1/genereaza-cnp-test.js \
   module-1/populeaza-tranzactie-demo.js \
@@ -28,6 +28,7 @@ for f in \
   module-5/test-e2e-idempotency.js \
   module-5/test-mutatie-cost.js \
   module-5/test-caddy-rutare.js \
+  module-5/test-stripe-live.js \
   config-autoact.js \
   site/app.js site/validare.js site/config.js site/demo-data.js site/construieste-inline.js site/construieste-og.js \
   site/test-banca-cifre.js site/test-mutatie-pagini-legale.js config-autoact.js \
@@ -39,56 +40,59 @@ do
   node --check "$f"
 done
 bash -n module-3/deploy-autoact.sh
-echo "OK — 27 fișiere JS + 1 bash, sintaxă validă"
+echo "OK — 28 fișiere JS + 1 bash, sintaxă validă"
 
-pas "2/15 · Scheme JSON (Profil de Tranzacție + harta placeholder-e)"
+pas "2/16 · Scheme JSON (Profil de Tranzacție + harta placeholder-e)"
 node -e "JSON.parse(require('fs').readFileSync('module-1/profil-tranzactie.schema.json','utf8')); console.log('profil-tranzactie.schema.json: VALID')"
 node -e "JSON.parse(require('fs').readFileSync('module-2/sabloane/placeholders.json','utf8')); console.log('placeholders.json: VALID')"
 
-pas "3/15 · Test Data Kit — 5 CNP-uri regenerate + re-verificate"
+pas "3/16 · Test Data Kit — 5 CNP-uri regenerate + re-verificate"
 node module-1/genereaza-cnp-test.js
 
-pas "4/15 · Suita CNP — 90 de verificări (n8n + UI, output identic obligatoriu)"
+pas "4/16 · Suita CNP — 90 de verificări (n8n + UI, output identic obligatoriu)"
 node module-2/test-cnp-validator.js
 
-pas "5/15 · Compatibilitate UI ↔ n8n — 29 de verificări"
+pas "5/16 · Compatibilitate UI ↔ n8n — 29 de verificări"
 node verifica-ui-validare.js
 
-pas "6/15 · Profil de Tranzacție demo — 6 verificări end-to-end"
+pas "6/16 · Profil de Tranzacție demo — 6 verificări end-to-end"
 node module-1/populeaza-tranzactie-demo.js
 
-pas "7/15 · Șabloane Google Docs — 57 de verificări (tokeni, căi, harta nodului)"
+pas "7/16 · Șabloane Google Docs — 57 de verificări (tokeni, căi, harta nodului)"
 node module-2/verifica-sabloane.js
 
-pas "8/15 · Builder-e workflow (pipeline + plăți) + site (pagini din șabloane + demo inline + etichete de partajare)"
+pas "8/16 · Builder-e workflow (pipeline + plăți) + site (pagini din șabloane + demo inline + etichete de partajare)"
 node module-2/build-workflow.js
 node module-5/build-workflow-plati.js
 node site/construieste-inline.js
 node site/construieste-og.js
 node brand/facebook/cheie-de-configurare.js
 
-pas "9/15 · Pipeline END-TO-END: webhook→OCR fake→Gemini fake→validator→IF-uri→ZIP→Gmail"
+pas "9/16 · Pipeline END-TO-END: webhook→OCR fake→Gemini fake→validator→IF-uri→ZIP→Gmail"
 node module-2/test-pipeline-e2e.js
 
-pas "10/15 · E2E cu PostgreSQL REAL (docker): idempotency pe order_id + job GDPR"
+pas "10/16 · E2E cu PostgreSQL REAL (docker): idempotency pe order_id + job GDPR"
 node module-5/test-e2e-idempotency.js
 
-pas "11/15 · BANCA DE CIFRE — nicio cifră în textul public fără origine în cod (+ paginile legale + test de mutație)"
+pas "11/16 · BANCA DE CIFRE — nicio cifră în textul public fără origine în cod (+ paginile legale + test de mutație)"
 node site/test-banca-cifre.js
 node site/test-mutatie-pagini-legale.js
 
-pas "12/15 · BUGET 0 RON — cerințele rămân în cotele Always Free (+ test de mutație)"
+pas "12/16 · BUGET 0 RON — cerințele rămân în cotele Always Free (+ test de mutație)"
 node verifica-cost-0.js
 node module-5/test-mutatie-cost.js
 
-pas "13/15 · Rutare Caddy REALĂ (docker): site static + proxy webhook + UI n8n + 404 + TLS"
+pas "13/16 · Rutare Caddy REALĂ (docker): site static + proxy webhook + UI n8n + 404 + TLS"
 node module-5/test-caddy-rutare.js
 
-pas "14/15 · Identitate Facebook: materialele spun ce spun și codul (preț, 3 documente, PNG-uri la zi) + test de mutație"
+pas "14/16 · Identitate Facebook: materialele spun ce spun și codul (preț, 3 documente, PNG-uri la zi) + test de mutație"
 node brand/test-copy-facebook.js
 node brand/test-mutatie-facebook.js
 
-pas "15/15 · Artefacte generate la zi + docker compose config"
+pas "15/16 · Stripe LIVE: comutatorul sandbox/live, ghidul și codul spun același lucru (+ 3 mutații)"
+node module-5/test-stripe-live.js
+
+pas "16/16 · Artefacte generate la zi + docker compose config"
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   # site/sitemap.xml NU e în listă: conține data zilei, deci se schimbă
 # la fiecare build prin definiție — un artefact care diferă oricum nu

@@ -1,0 +1,161 @@
+# Configurarea Stripe-ului: din sandbox în LIVE
+
+Documentul e executat de om, în contul Stripe al fondatorului. **Nu conține
+secrete și nu trebuie să conțină vreunul**: IBAN-ul, cheia API și semnătura
+webhook-ului se introduc direct în interfața Stripe sau în `.env` pe server.
+Tot ce se copiază aici în repo e public prin natura lui (ID-uri de produs și
+Payment Link-ul ajung oricum în payload-ul trimis clientului).
+
+Cifrele de mai jos sunt verificate automat de `module-5/test-stripe-live.js`
+împotriva lui `site/config.js` și a workflow-urilor generate — dacă schimbi
+prețul sau linkul în config, testul CADE până nu schimbi și documentul.
+
+---
+
+## 0. Starea de azi
+
+Contul Stripe există cu **test mode** pornit: produsul de 49 lei și
+Payment Link-ul de test sunt create, iar plățile au fost măsurate pe sandbox
+(cifrele din `LAUNCH.md` §1.bis). De azi începe partea de **live**.
+
+Regulă de aur: **test mode și live mode sunt același cont, două regimuri.**
+Nu ștergi nimic din test mode. Clonezi produsul în live, ca să poți măsura
+în continuare fără să tai în carne vie produsul testat.
+
+## 1. Activate live — formularul din cont
+
+Dashboard → în dreapta sus, selectorul de regim → **Move to live / Activate
+payments**.
+
+⚠️ **Țara de origine a contului devine ireversibilă** după activare (scris
+explicit în documentația Stripe: „you can't change the business origin
+country” după ce activezi un serviciu pe cont live). Alege **Romania**, nu
+„United States” — și nu te răzlești într-un cont american care sună mai bine.
+
+Ce îți cere formularul, în ordine:
+
+| Câmp | Ce pui | De ce contează |
+|---|---|---|
+| Business type | **Persoană fizică** (Individual) | n-avem CUI; alegerea asta nu e ireversibilă, dar **nu** e motivul pentru care Stripe nu ne cere CUI |
+| Nume legal | exact cum e în actul de identitate | trebuie să coincidă cu numele de pe IBAN, altfel contul trece în „restricted” |
+| Adresă | adresa de **domiciliu** din act | e adresa pe care o verifică Stripe |
+| Telefon | telefonul tău real | Stripe sună dacă ceva nu se potrivește |
+| Email de suport | cel care primește întrebări de la clienți | apare pe pagina de plată și pe facturi |
+| **IBAN** | **RO**, cont în **lei**, pe numele titularului contului | Stripe face două micro-încărcări (câteva bani, apoi anulate) ca să-l verifice |
+
+**IBAN-ul se introduce în Stripe, nu aici.** Nu în `config.js`, nu în `.env`,
+nu într-un workflow, nu într-un mesaj. Un cont curent scris într-un fișier
+versionat ajunge public la primul push.
+
+Dacă Stripe cere totuși un număr de înregistrare fiscală și tu nu ai încă:
+începe cu datele de persoană fizică și lasă review-ul să decidă. Nu inventa
+un CUI — Stripe verifică.
+
+## 2. După activare: `Managed Payments` (Merchant of Record)
+
+Căută în cont după „Managed Payments”. **Nu e un buton, e un review de
+eligibilitate.** Conform documentației Stripe, sunt trei condiții:
+
+1. **Business location** — una din zonele suportate. România intră în
+   categoria „Europe”, deci condiția e îndeplinită.
+2. **Business eligibility** — „Stripe determines access based on an
+   eligibility review that considers factors such as business type and
+   geography”. Deci răspunsul final îl dă Stripe, nu noi.
+3. **Produs digital, complet automatizat** — sunt excluse explicit serviciile
+   profesionale și orice produs cu intervenție umană.
+
+Dacă ne întreabă, răspunsul onest: pachetul e generat automat din poze
+(OCR + șabloane), clientul își verifică propriile date înainte să plătească,
+nu există consultanță umană. Codul fiscal folosit e `txcd_10000000`
+„General — Electronically Supplied Services”, care **este** pe lista oficială
+de coduri eligibile pentru Managed Payments.
+
+**Dacă Stripe refuză** — și asta e o variantă reală, pentru că pachetul e
+„documente pentru o tranzacție auto reală” și poate fi catalogat ca serviciu
+profesional — atunci nu se schimbă codul, se schimbă modelul: procesator
+simplu, **noi** suntem vânzătorul de drept, deci trebuie CUI/PFA înainte de
+prima vânzare și emitem noi factura. Ziua nu e negociabilă cu legea.
+
+## 3. Produsul live
+
+Nu modifica produsul de test. **Clonează-l** în live mode și verifică:
+
+- preț **49 RON**, **one-off** (o plată, nu abonament)
+- **tax inclusive** — prețul afișat e cu TVA inclus, nu se adaugă TVA la
+  final; altfel clientul vede 62,30 lei și proiectul minte în fața lui
+- tax code **txcd_10000000**
+
+## 4. Payment Link live
+
+Payment Links → produsul clonat → creează linkul → copiază URL-ul. Arată așa:
+
+```
+https://buy.stripe.com/live_...
+```
+
+Asta e singurul lucru de pe întreaga listă pe care mi-l trimiți. Îl pun în
+`site/config.js` (`STRIPE.PAYMENT_LINK`), rulez `bash ruleaza-teste.sh` și
+reconstruiesc workflow-urile și pagina.
+
+Cât timp `PLATARI.LIVE` e `false`, testul verifică că linkul e de test **și**
+că nicio pagină livrată nu conține un link de plată — butonul „Cumpără acum”
+nu apare pe site. Deci nu există cum să ajungă un client într-un flux de
+plată fals.
+
+## 5. Webhook-ul (obligatoriu înainte de prima plată reală)
+
+Developers → Webhooks → Add endpoint:
+
+| Câmp | Valoare |
+|---|---|
+| URL | `https://autoact.eu/webhook/stripe` |
+| Eveniment | `checkout.session.completed` |
+| Signing secret | `whsec_…` → `.env` pe server, ca `STRIPE_WEBHOOK_SECRET` |
+
+**Endpoint-ul trebuie să existe și să răspundă înainte să-l adaugi în Stripe.**
+Altfel Stripe refuză evenimentele și nu vei vedea niciodată notificarea: n8n
+crede că nu s-a plătit și nu generează documentele, iar clientul a plătit.
+
+Signing secret-ul **nu** mi-l trimiți. Deploy-ul creează `.env` cu cheile
+goale și îți spune care lipsește; îl completezi tu prin SSH:
+
+```
+ssh <server> 'cd ~/autoact && nano .env'   # STRIPE_WEBHOOK_SECRET=whsec_…
+```
+
+`deploy-autoact.sh` verifică toate patru cheile și avertizează explicit pe
+carea goală — pentru că un secret lipsă ar arăta ca un stack pornit cu
+succes, iar prima plată reală s-ar pierde tăcut.
+
+## 6. Datele publice din cont (apar pe extrase și facturi)
+
+Settings → Business → public details. Clienții văd numele afișat pe
+extrasul de cont și pe factura Stripe: **nume, adresă, email și telefon de
+suport**. Trebuie să coincidă cu blocul NAP din `site/config.js` — aceleași
+date apar și pe pagina de contact și în JSON-LD.
+
+## 7. Verificare după ce e live
+
+1. Fă o plată reală de **49 lei** cu cardul tău, de pe telefon, ca client.
+2. Stripe → Logs → webhook-ul endpoint-ului: trebuie să apară
+   `checkout.session.completed` cu `200 OK`. Dacă nu apare, problema e la
+   URL-ul endpoint-ului, nu la n8n.
+3. Verifică manual: ZIP-ul vine pe e-mail, iar **factura vine de la Stripe**,
+   nu de la noi. Dacă factura apare și din partea noastră, ceva e dublu
+   facturat și se oprește tot.
+4. Retrigger-ează webhook-ul din Logs → **resend**: pachetul nu trebuie
+   să se genereze a doua oară (idempotență).
+5. Un POST cu antet `Stripe-Signature` fals trebuie respins cu **HTTP 400**.
+
+## 8. Ce se întâmplă în cod, în ordine
+
+| Fișier | Ce se schimbă |
+|---|---|
+| `site/config.js` | `PLATARI.LIVE: true` + cele trei ID-uri live |
+| `module-2/autoact-workflow.json` | generat — Payment Link-ul intră în `url_plata` |
+| `module-5/autoact-workflow-plati.json` | generat — webhook-ul primește evenimentul live |
+| `site/index.html` | butonul „Cumpără acum”, abia acum |
+| `module-5/test-stripe-live.js` | verifică coerența de mai sus |
+
+`STRIPE_WEBHOOK_SECRET` merge **doar** în `.env` pe server. Nu în repo, nu în
+`config.js`, nu în workflow.

@@ -17,7 +17,9 @@ interzice explicit „free web-hosting service to run your online business, e-co
 AutoAct vinde, deci planul gratuit nu se aplică. Vercel Hobby are aceeași restricție
 (necomercial). Cloudflare Pages și Netlify Free permit uz comercial pe plan gratuit.
 
-După deploy: editezi `config.js` și pui `WEBHOOK_URL` = Production URL-ul real al nodului Webhook UI (`https://api.autoact.eu/webhook/test-ui`). Lăsat gol, site-ul rulează în **mod demo**, fără backend.
+După deploy: editezi `config.js` și pui `WEBHOOK_URL` = Production URL-ul real al nodului Webhook UI (`https://autoact.eu/webhook/test-ui`). Lăsat gol, site-ul rulează în **mod demo**, fără backend.
+
+⚠️ **Un singur domeniu, tot pe VM.** Caddy servește site-ul, webhook-urile și interfața n8n pe același domeniu (cel dat la deploy: `deploy-autoact.sh <user@host> autoact.eu`). De aceea `autoact.eu` trebuie să indice spre VM, nu spre Cloudflare Pages: dacă domeniul ar merge la Pages, Caddy nu ar primi niciodată trafic, iar webhook-urile Stripe și formularul de plată ar răspunde 404 — fără nicio eroare vizibilă în Stripe.
 
 ## Prețul: o singură cifră în tot proiectul (banca de cifre)
 

@@ -368,7 +368,10 @@ details p { margin: 8px 0 0; color: var(--text-slabit); }
 /* AutoAct | site | config.js
  * Unicul fișier de editat la deploy.
  * WEBHOOK_URL = Production URL-ul nodului „Webhook UI" din workflow-ul n8n
- * (module-2/autoact-workflow.json): https://api.autoact.eu/webhook/test-ui
+ * (module-2/autoact-workflow.json): https://autoact.eu/webhook/test-ui
+ * ⚠ Un singur domeniu: Caddy servește site-ul ȘI webhook-urile pe domeniul
+ * de la deploy (deploy-autoact.sh … autoact.eu). De aceea și webhook-ul
+ * Stripe de mai jos e pe același domeniu, nu pe un subdomeniu.
  * GOAL = mod demo: pagina rulează fără server (previzualizare din
  * demo-data.js). Abia după ce pui URL-ul real, fluxul real se activează.
  *
@@ -411,7 +414,16 @@ window.AUTOACT_CONFIG = {
    */
   PLATARI: {
     PROCESATOR: 'stripe',
-    PRAG_COMENZI_REGULARIZARE: 200
+    PRAG_COMENZI_REGULARIZARE: 200,
+    /* Un singur comutator: suntem pe bani reali sau încă în test mode?
+     * false → Payment Link-ul trebuie să fie de test și nicio pagină
+     * livrată nu poate conține un link de plată (altfel un client ajunge
+     * într-un flux de plată fals și nu mai știi dacă a plătit).
+     * true  → linkul trebuie să fie live (…/live_…).
+     * Verificarea stă în config-autoact.js (verificaLegaturaStripe) și
+     * e testată cu mutații în module-5/test-stripe-live.js.
+     * Pașii de activare, cu IBAN cu tot: module-5/configurare-stripe-live.md */
+    LIVE: false
   },
 
   /* Identificatorii din contul Stripe. ID-urile nu sunt secrete (Payment
@@ -424,7 +436,7 @@ window.AUTOACT_CONFIG = {
     PRET_ID: 'price_1UMWpDPhXnPwCaLh5VcKOavY',   // 49.00 RON, one-off, TVA inclus
     PAYMENT_LINK: 'https://buy.stripe.com/test_6oU8wR7L91QodQ97ap4ZG01',
     COD_FISCAL: 'txcd_10000000',       // General — Electronically Supplied Services
-    WEBHOOK_URL_STRIPE: 'https://api.autoact.eu/webhook/stripe'
+    WEBHOOK_URL_STRIPE: 'https://autoact.eu/webhook/stripe'
   },
 
   /* Cele două lucruri pe care legea nu le poate deduce din cod și pe care

@@ -1,7 +1,7 @@
 # AutoAct — Plan de lansare (LAUNCH.md)
 
 > Documentul care spune **în ce ordine** se pornește AutoAct și **ce blochează** fiecare pas.
-> Tot ce e în cod e testat automat (`bash ruleaza-teste.sh` — 15 pași, verde în CI).
+> Tot ce e în cod e testat automat (`bash ruleaza-teste.sh` — 16 pași, verde în CI).
 > Ce **nu** poate fi testat de cod e listat aici ca blocaj: conturi, secrete, decizii legale.
 
 **Promisiune de produs:** pachet acte transcriere auto în 60 s · 49 RON · cost operațional **0 RON**.
@@ -23,7 +23,7 @@
 | Cont Stripe (sandbox) + produs 49 lei + „Managed Payments" | ✅ creat, plăți reale măsurate |
 | Cont Stripe **live** (Go live) | ❌ cere date personale + act de identitate |
 | Conturi externe (OpenAI, Gemini, Google) | ❌ de creat |
-| Git remote + push | ✅ repo public `blogbrasov-debug/autoact`, suita de 15 pași verde în CI |
+| Git remote + push | ✅ repo public `blogbrasov-debug/autoact`, suita de 16 pași verde în CI |
 | Identitate vizuală Facebook (5 materiale la dimensiunile Meta) | ✅ generate în `brand/png/` |
 | Configurarea paginii + grupului Facebook | ✅ texte gata de lipit în `brand/facebook/` |
 | Gardul materialelor Facebook contra codului | ✅ 169 verificări + 8 mutații, pasul 14 |
@@ -87,7 +87,7 @@ node site/test-banca-cifre.js     # trebuie să NU mai afișeze avertismentul de
 | OpenAI | cheie API (Vision OCR) | n8n Credentials |
 | Google AI Studio | cheie Gemini | n8n Credentials |
 | Google (Docs + Gmail) | cont, OAuth2, 3 șabloane create din `module-2/sabloane/` | n8n Credentials + `.env` |
-| Cloudflare (DNS + hosting) | `autoact.eu` → Cloudflare Pages (site); `api.autoact.eu` → IP-ul VM-ului | DNS |
+| Cloudflare (DNS) | `autoact.eu` → IP-ul VM-ului (proxy galben, TLS la Caddy) | DNS |
 
 ⚠️ **Contul Google** e singurul care cere **creare manuală a celor 3 șabloane** — instrucțiunile sunt
 în `module-2/sabloane/README.md`. Fără ele, nodul „Placeholder-e Docs" nu are ce înlocui.
@@ -136,9 +136,13 @@ platforma nu e destinată și nu e permisă ca serviciu de găzduire pentru afac
 web-hosting service to run your online business"). Un site care vinde la 49 RON intră
 exact în acea excludere. Vercel Hobby are aceeași limitare, declarată mai direct.
 
-**Două adrese, un singur domeniu:** `autoact.eu` → site (Cloudflare Pages),
-`api.autoact.eu` → VM (Caddy → n8n). Clientul nu vede diferența; eu câștig că site-ul rămâne
-disponibil chiar dacă Oracle îți recicla instanța (vezi §2.bis).
+**O singură adresă, tot pe VM:** `autoact.eu` → VM (Caddy → site + webhook-uri + n8n).
+Varianta cu `autoact.eu` pe Pages și `api.autoact.eu` pe VM a fost abandonată: Caddy
+servește site-ul și webhook-urile pe același domeniu, deci un subdomeniu ar însemna
+două TLS, două locuri de deploy și un site care dispare odată cu instanța Oracle, fără
+să câștigăm nimic concret în schimb. Concret: dacă
+`autoact.eu` ar indica spre Pages, Caddy nu ar primi trafic, iar webhook-ul Stripe ar
+răspunde 404 fără nicio eroare vizibilă în contul Stripe.
 
 ### Starea reală a numelui „AutoAct" — verificată
 
@@ -312,7 +316,7 @@ riscă să-și vadă VM-ul oprit fără un motiv vizibil. Nu e factură — e di
 serviciului și zile de refacere.
 
 Cum te protejezi: după deploy, verifică weekly în Oracle Console starea
-instantei și pe un job săptămânal care face un `curl` pe `api.autoact.eu` (deci
+instantei și pe un job săptămânal care face un `curl` pe `autoact.eu/webhook/stripe` (deci
 n8n execută ceva și contul nu e „idle"). Un ping real de săptămânal e suficient.
 
 **b) Limita Always Free s-a înjumătățit.** Pe **15 iunie 2026**, Oracle a redus
@@ -402,11 +406,11 @@ atât de mic. Grupul nu se poate programa nativ — se postează manual.
 | 2 | `LEGAL` în `site/config.js` (data de aplicare + instanțe) | Fondator + juridic | publicarea paginilor legale |
 | 3 | Conturi Google (Docs + Gmail) | Fondator | pașii 2, 6, 7 |
 | 4 | 3 șabloane Google Docs create | Fondator | pasul 6 |
-| 5 | Cont Stripe **live** (date personale + act de identitate) | Fondator | pasul 7 (doar sandbox merge acum) |
+| 5 | Cont Stripe **live** (date personale + act de identitate + IBAN) — pașii în `module-5/configurare-stripe-live.md` | Fondator | pasul 7 (doar sandbox merge acum) |
 | 5.bis | `STRIPE_WEBHOOK_SECRET` în `.env` | Fondator | **nicio plată nu generează documente** |
 | 5.ter | Regim TVA confirmat cu contabilul | Contabil | înainte de 200 de comenzi |
 | 6 | `autoact.eu` înregistrat (≈1,59 €) | Fondator | pasul 3 (fără domeniu, Caddy nu poate emite TLS) |
-| 7 | DNS `autoact.eu` → Pages, `api.autoact.eu` → VM | Fondator | pasul 3 (Caddy emite TLS doar cu DNS valid) |
+| 7 | DNS `autoact.eu` → VM | Fondator | pasul 3 (Caddy emite TLS doar cu DNS valid) |
 | 8 | `.env` de pe server salvat local | Fondator | **pierderea credential-urilor n8n** |
 | 9 | Cloudflare Pages: proiect creat, site publicat | Fondator | pasul 5 (site-ul rămâne local, nevizibil) |
 | 10 | Reclaim pe cont inactiv | Fondator | continuitate (vezi §2.bis) |
@@ -436,7 +440,7 @@ cp .env backup-env-local        # ⚠️ NU în git
 ## 5. Checklist înainte de GO
 
 - [ ] NAP complet în `site/config.js`, fără avertisment de placeholder la test
-- [ ] `bash ruleaza-teste.sh` verde (15/15 pași)
+- [ ] `bash ruleaza-teste.sh` verde (16/16 pași)
 - [ ] `/termeni` și `/gdpr` publicate și linkate
 - [ ] Conturi create, secrete introduse în n8n + `.env`
 - [ ] 3 șabloane Google Docs create, ID-urile în `.env`

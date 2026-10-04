@@ -39,7 +39,7 @@
 
 /* Prețul vine din SURSĂ (site/config.js) via config-autoact.js — nu mai e o cifră
  * scrisă manual aici. Dacă schimbi prețul, schimbi config.js doar. */
-const { PRET_RON } = require('../config-autoact.js');
+const { PRET_RON, STRIPE } = require('../config-autoact.js');
 
 /* Stripe trimite suma în unități mici (ceni). Un factor scris în șirul
  * de mai jos ar fi încă o valoare de întreținut lângă preț — îl notăm
@@ -615,7 +615,7 @@ add({
   position: [-220, -80],
   parameters: {
     width: 560, height: 300, color: 4,
-    content: '\n## INSTALARE — AutoAct Plăți + Documente (Stripe → Docs → ZIP)\n1) n8n → ⋯ → **Import from File** → acest JSON.\n2) **Schema DB:** rulează o dată module-5/plati-schema.sql (docker compose exec -T postgres psql -U autoact -d autoact).\n3) **Env (docker-compose.yml):** STRIPE_WEBHOOK_SECRET, GOOGLE_DOCS_TEMPLATE_CONTRACT / _DRPCIV / _DECLARATII.\n4) **Credentials n8n:** Google OAuth2 (Drive + Docs scope-uri) — nodurile 12–15.\n5) **Stripe:** Developers → Webhooks → endpoint POST https://autoact.eu/webhook/stripe, evenimentul checkout.session.completed. Copiază Signing secret în .env ca STRIPE_WEBHOOK_SECRET.\n6) Activează workflow-ul.\n⚠ Facturarea NU e aici: Stripe rulează ca Merchant of Record („Managed Payments”) și emite factura cu TVA direct către client.'
+    content: '\n## INSTALARE — AutoAct Plăți + Documente (Stripe → Docs → ZIP)\n1) n8n → ⋯ → **Import from File** → acest JSON.\n2) **Schema DB:** rulează o dată module-5/plati-schema.sql (docker compose exec -T postgres psql -U autoact -d autoact).\n3) **Env (docker-compose.yml):** STRIPE_WEBHOOK_SECRET, GOOGLE_DOCS_TEMPLATE_CONTRACT / _DRPCIV / _DECLARATII.\n4) **Credentials n8n:** Google OAuth2 (Drive + Docs scope-uri) — nodurile 12–15.\n5) **Stripe:** Developers → Webhooks → endpoint POST ' + STRIPE.WEBHOOK_URL + ', evenimentul checkout.session.completed. Copiază Signing secret în .env ca STRIPE_WEBHOOK_SECRET.\n6) Activează workflow-ul.\n⚠ Facturarea NU e aici: Stripe rulează ca Merchant of Record („Managed Payments”) și emite factura cu TVA direct către client.'
   }
 });
 add({
