@@ -1,0 +1,63 @@
+# Publică doar folderul site/ pe GitHub Pages.
+#
+# GitHub Pages poate servi doar rădăcina repo-ului sau /docs, deci nu poate
+# folosi /site. De aceea copiem conținutul site/ într-un ramur separat și îl
+# publicăm de acolo, cu domeniul propriu și HTTPS de la GitHub.
+#
+# Nu se publică nimic din module-1..6: acolo stau secrete și cod de infrastructură.
+
+name: Publică site-ul pe Pages
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'site/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publica:
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Copiază site-ul în ramura de publicare
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          rm -rf _publicat
+          mkdir -p _publicat
+          cp -r site/. _publicat/
+
+          # Orice pagină care cere server (/webhook/…) nu poate funcționa pe
+          # Pages, fiindcă aici nu rulează niciun backend. Redirect către
+          # pagina principală, ca un link vechi să nu dea eroare goală.
+          mkdir -p _publicat/webhook
+          printf '<meta http-equiv="refresh" content="0; url=/">' > _publicat/webhook/index.html
+
+          git checkout --orphan pages-publicat
+          git add -A _publicat
+          git commit -m "Publică site-ul (automat)"
+          git push origin pages-publicat
+
+      - name: Configurează Pages
+        id: configure
+        uses: actions/configure-pages@v5
+
+      - name: Publică
+        id: deploy
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _publicat
