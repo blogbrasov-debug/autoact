@@ -44,6 +44,16 @@ function ok(condiție, mesaj) {
 }
 const contine = (text, ce) => text.includes(ce);
 
+/* Un ghid rescris de mână se uită de diacritice: „nu se poate încasa”
+ * ajunge „nu se poate incerca”. Un regex cu diacritice ar trece mutația
+ * și n-ar detecta regresia pe care tocmai am reparat-o. Deci comparațiile
+ * de mai jos rulează pe text normalizat. */
+const faraDiacritice = (s) =>
+  s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const GhidPlin = faraDiacritice(Ghid);
+const contineFara = (ce) => GhidPlin.includes(faraDiacritice(ce));
+const areFara = (re) => re.test(GhidPlin);
+
 /* ---------- 1. Comutatorul LIVE vs Payment Link ---------- */
 /* Implementare independentă a regulii: dacă cineva șterge apelul din
  * config-autoact.js, gardul din cod dispare, dar această verificare
@@ -80,17 +90,42 @@ ok(
   'ghidul numește corect codul fiscal (e pe lista oficială de coduri eligibile)'
 );
 
-/* Constatarea care a schimbat planificarea: la business type, Stripe
- * România oferă doar PFA / SRL / non-profit. Dacă cineva rescrie ghidul
- * și uită asta, reapare ideea că se poate încasa fără CUI — și planificarea
- * de 200 de comenzi devine din nou greșită. */
+/* Business type în România oferă doar PFA / SRL / non-profit — asta rămâne
+ * adevărat și contează pentru alegerea regimului fiscal. */
 ok(
   /PFA/.test(Ghid) && /[îi]ntreprinderea individual/i.test(Ghid) && /non_profit/.test(Ghid),
   'ghidul spune că Stripe RO cere PFA (nu există „persoană fizică neînregistrată”)'
 );
+
+/* Dar PFA-ul NU e condiția de încasare. Stripe scrie că pentru un individ
+ * e suficient numărul de act de identitate („or government-issued ID number,
+ * if you are an individual”), iar documentația listează CNP pentru România.
+ * Fără aceste verificări, cineva rescrie ghidul, reintroduce „nu se poate
+ * încasa fără CUI” și pleacă din nou la ANAF crezând că e obligatoriu —
+ * exact regresia pe care a produs-o o versiune anterioară a ghidului. */
 ok(
-  /nu se poate încasa/i.test(Ghid) && /ANAF/.test(Ghid),
-  'ghidul spune că PFA-ul se ia înaintea primei plăți, la ANAF'
+  areFara(/government-issued id number/) && areFara(/individual/),
+  'ghidul citește regula Stripe: pentru un individ e suficient numărul de act de identitate'
+);
+ok(areFara(/cnp/) && areFara(/cod numeric personal/), 'ghidul spune că în România identificatorul național acceptat de Stripe e CNP-ul');
+ok(contineFara('Tax information') && areFara(/cnp/), 'ghidul arată explicit că la Tax information se pune CNP-ul, nu se lasă gol');
+
+/* PFA rămâne calea de rezervă, nu calea principală: ANAF apare doar ca
+ * „doar dacă CNP-ul e respins”, nu ca un pas obligatoriu. */
+ok(
+  areFara(/doar daca/) && areFara(/anaf/),
+  'ghidul pune PFA-ul/ANAF ca plan B, nu ca blocaj obligatoriu'
+);
+ok(
+  !areFara(/nu se poate incerca/),
+  'ghidul nu mai spune că nu se poate încasa fără CUI (ar fi fals: pentru un individ se poate)'
+);
+
+/* CNP-ul e identificator personal: nu are ce căuta într-un fișier versionat,
+ * la fel ca IBAN-ul. */
+ok(
+  !/\b\d{13}\b/.test(Ghid),
+  'ghidul nu conține niciun CNP (13 cifre); se introduce direct în Stripe'
 );
 
 /* Documentul nu conține secrete. Motivul nu e paranoia: un signing

@@ -49,19 +49,40 @@ Ce îți cere formularul, în ordine (citit direct din contul live):
 nu într-un workflow, nu într-un mesaj. Un cont curent scris într-un fișier
 versionat ajunge public la primul push.
 
-### 1.bis. PFA înseamnă CUI: blocaj real, nu formalitate
+### 1.bis. Nu trebuie PFA ca să încasezi: pentru un individ e suficient CNP-ul
 
-Varianta `individual` din formular **este** întreprinderea individuală, deci
-presupune CUI de la ANAF. Consecința pentru planificare: prin Stripe România
-**nu se poate încasa nici măcar o dată fără CUI**. Deci
+Varianta `individual` din formular e contul unei **persoane fizice**. Iar
+Stripe, în articolul despre TIN, scrie explicit:
+
+> „You must have a TIN (or government-issued ID number, if you are an
+> individual or sole proprietor) registered in your country of business in
+> order to use Stripe.”
+
+Adică: **pentru un individ, numărul de act de identitate e acceptat în loc de
+CUI.** În România, documentația Stripe listează pentru verificare națională
+exact `Cod Numeric Personal (CNP)` (vezi §1.ter.bis.bis). Consecința pentru
+planificare: blocajul de la §1.ter **se rezolvă în 5 minute, cu date pe care
+le ai deja în buzunar**, fără drum la ANAF, fără bani, fără săptămână de
+așteptare.
+
 `PLATARI.PRAG_COMENZI_REGULARIZARE = 200` rămâne pragul de discuție cu
-contabilul (regim de TVA, dacă se trece la sistem real), **nu** data de la
-care devii legal. Data reală de la care devii legal e PFA-ul.
+contabilul (regim de TVA, dacă se trece la sistem real), nu o poartă pe care
+Stripe nu te lasă să treci.
 
-Ordinea practică: înregistrezi PFA-ul la ANAF (gratuit; act de identitate +
-certificat de persoană fizică), apoi revii aici cu CUI-ul. Nu completa nimic
-înainte să-l ai — numărul de înregistrare fiscală se verifică, iar o valoare
-greșită blochează contul.
+Ce rămâne de făcut, în ordine, și unde se oprește fiecare:
+
+| Pas | Ce faci | Cost | Cât durează |
+|---|---|---|---|
+| 1 | Completezi `Tax information` cu numele de pe act + **CNP-ul** | 0 lei | 5 min |
+| 2 | Stripe acceptă sau nu CNP-ul în acel câmp | 0 lei | imediat |
+| 3 | *doar dacă pasul 2 e respins* — înregistrezi PFA la ANAF și revii cu CUI | 0 lei (înregistrarea e gratuită) | câteva zile |
+
+**CNP-ul se introduce în Stripe, nu aici.** Nu în `config.js`, nu în
+`.env`, nu într-un workflow, nu într-un mesaj către mine. E un identificator
+personal, la fel de sensibil ca actul de identitate.
+
+Nu completa cu un CUI inventat sau cu numărul unui prieten: numărul se
+verifică, iar o valoare greșită blochează contul mai tare decât un câmp gol.
 
 Cei 5 pași ai onboarding-ului, așa cum apar în cont:
 
@@ -83,9 +104,9 @@ Formularul Settings → **Tax information** cere trei lucruri, toate goale:
 | Câmp | Ce pune | De ce nu se poate completa acum |
 |---|---|---|
 | Type of business | Persoană Fizică Autorizată / Întreprinderea individuală | deja completat |
-| **Numele exact de pe actul fiscal** | trebuie să coincidă **caracter cu caracter** cu numele de pe CUI | e în certificatul fiscal de la ANAF |
-| **Tax Identification Number** | CUI (sau CNP, după cum se folosește fiscal) | vine odată cu PFA-ul |
-| **VAT number (CIF)** | CUI, în formatul cu `RO` | idem |
+| **Numele exact de pe actul fiscal** | trebuie să coincidă **caracter cu caracter** cu numele de pe actul de identitate | îl ai acum |
+| **Tax Identification Number** | **CNP-ul de pe actul de identitate** pentru un individ; CUI dacă ai PFA | îl ai acum — vezi §1.ter.bis.bis |
+| **VAT number (CIF)** | doar dacă ești plățitor de TVA | nu se aplică la 49 lei vândute sporadic |
 
 Stripe avertizează explicit: „Updating this information may introduce new account
 requirements… You will have a **7-day grace period** during which account
@@ -96,6 +117,52 @@ Așadar: contul funcționează acum, dar **nu se completează nicio plată de su
 cât timp formularul e gol și Stripe a început perioada de grație. Prioritatea după
 PFA e să se completeze imediat cu datele de pe certificatul fiscal — un nume
 greșit acolo înseamnă raportare fiscală greșită și cont restricționat.
+
+### 1.ter.bis.bis. Calea rapidă, gratuită: CNP-ul de pe actul de identitate
+
+⚠️ **Secțiunea care anulează „stai până obții PFA-ul”.** Dacă ai citit doar până
+la §1.ter și ai crezut că blocajul cere un drum la ANAF și o săptămână, te-ai
+oprit inutil. Nu cere.
+
+**Dovada 1 — regula Stripe pentru indivizi.** Articolul oficial „Tax ID Number
+(TIN) format is different than Stripe's suggested TIN format in the
+dashboard" spune, cuvânt cu cuvânt:
+
+> „You must have a TIN (**or government-issued ID number, if you are an
+> individual or sole proprietor**) registered in your country of business in
+> order to use Stripe.”
+
+Deci pentru un **individual** numărul de act de identitate e acceptat în loc
+de TIN. Contul tău e `individual` (Business type: Persoană Fizică Autorizată
+/ Întreprinderea individuală).
+
+**Dovada 2 — CNP e identificatorul național recunoscut de Stripe în
+România.** Documentația „Upcoming requirements updates" are o tabelă
+„National ID type" cu rândul:
+
+> Romania — **Cod Numeric Personal (CNP)**
+
+Asta e exact numărul de pe actul tău de identitate.
+
+**Ce scrii, concret** (Settings → Business → Tax information):
+
+| Câmp | Ce scrii | De unde |
+|---|---|---|
+| Numele legal | exact cum e scris în act, **caracter cu caracter** | actul de identitate |
+| Tax Identification Number | **CNP-ul** | tot din act |
+| CIF / VAT | **lăsa gol** — nu ești plățitor de TVA | — |
+
+**Dacă Stripe totuși respinge CNP-ul** (nu s-a întâmplat, dar e posibil ca
+formularul să ceară CUI pentru `individual`): atunci mergi la varianta PFA,
+gratuită la ANAF. Nu e o catastrofă, dar e pasul 3, nu pasul 1.
+
+⚠️ **CNP-ul nu se scrie nicăieri în acest repo** și nici nu mi-l trimiți. Se
+introduce direct în interfața Stripe. E un identificator personal, la fel de
+sensibil ca actul de identitate.
+
+**Sursele** (verificate la 4 oct. 2026):
+- <https://support.stripe.com/questions/tax-id-number-(tin)-format-is-different-than-stripe-s-suggested-tin-format-in-the-dashboard>
+- <https://docs.stripe.com/connect/upcoming-requirements-updates>
 
 ### 1.ter.bis. Emailurile clienților nu pot fi în română
 
